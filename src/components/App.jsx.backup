@@ -1,0 +1,1017 @@
+import React, { useState, useEffect, useCallback, useRef } from "react"
+import {
+  loadTodosLocalStorageSync,
+  loadTagsLocalStorageSync,
+  loadConfigLocalStorageSync,
+  loadContactsLocalStorageSync,
+} from "../utils/markdownHandler"
+import { electronAdapter } from "../utils/electronAdapter"
+import { debounce } from "../utils/debounce"
+import Sidebar from "./Sidebar"
+import MainFeed from "./MainFeed"
+import EditTodoDrawer from "./EditTodoDrawer"
+import ConfigManager from "./ConfigManager"
+
+function App() {
+  const [todos, setTodos] = useState(loadTodosLocalStorageSync())
+  const [tags, setTags] = useState(loadTagsLocalStorageSync())
+  const [contacts, setContacts] = useState(loadContactsLocalStorageSync())
+  const [config, setConfig] = useState(loadConfigLocalStorageSync())
+  const [selectedCompany, setSelectedCompany] = useState("All")
+  const [showConfig, setShowConfig] = useState(false)
+  const [showCompleted, setShowCompleted] = useState(false)
+  const [selectedTodo, setSelectedTodo] = useState(null)
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
+  const companyListFromTodos = Array.from(
+    new Set(
+      [...todos.active, ...todos.completed]
+        .map((t) => t.company)
+        .filter(Boolean),
+    ),
+  ).sort()
+  const companyListFromTags = Object.keys(tags).sort()
+  const companies = Array.from(
+    new Set([...companyListFromTodos, ...companyListFromTags]),
+  ).sort()
+  const [stats, setStats] = useState({})
+  const [filteredTodos, setFilteredTodos] = useState({
+    active: [],
+    completed: [],
+  })
+  const [saveStatus, setSaveStatus] = useState("saved") // 'saving', 'saved', 'error'
+  const [storageInfo, setStorageInfo] = useState(getStorageStatus())
+  const saveTodosFn = useRef(
+    debounce((todosData) => {
+      setSaveStatus("saving")
+      electronAdapter
+        .saveTodos(todosData)
+        .then(() => setSaveStatus("saved"))
+        .catch((e) => {
+          console.error("Failed to save todos:", e)
+          setSaveStatus("error")
+        })
+    }, 500),
+  ).current
+
+  const saveTagsFn = useRef(
+    debounce((tagsData) => {
+      setSaveStatus("saving")
+      electronAdapter
+        .saveTags(tagsData)
+        .then(() => setSaveStatus("saved"))
+        .catch((e) => {
+          console.error("Failed to save tags:", e)
+          setSaveStatus("error")
+        })
+    }, 500),
+  ).current
+
+  const saveContactsFn = useRef(
+    debounce((contactsData) => {
+      setSaveStatus("saving")
+      electronAdapter
+        .saveContacts(contactsData)
+        .then(() => setSaveStatus("saved"))
+        .catch((e) => {
+          console.error("Failed to save contacts:", e)
+          setSaveStatus("error")
+        })
+    }, 500),
+  ).current
+
+  // Load data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [loadedTodos, loadedTags, loadedContacts, loadedConfig] =
+          await Promise.all([
+            electronAdapter.getTodos(),
+            electronAdapter.getTags(),
+            electronAdapter.getContacts(),
+            electronAdapter.getConfig(),
+          ])
+
+        setTodos(loadedTodos || { active: [], completed: [] })
+        setTags(loadedTags || {})
+        setContacts(loadedContacts || { companies: {}, tags: {} })
+        setConfig(loadedConfig || getDefaultConfig())
+        setStats(getCompanyStats(loadedTodos || { active: [], completed: [] }))
+        setActiveTab(loadedConfig?.defaultView || "company")
+        console.log("✓ Data loaded successfully", {
+          todos: loadedTodos?.active?.length || 0,
+          tags: Object.keys(loadedTags || {}).length,
+        })
+      } catch (e) {
+        console.error("Failed to load data:", e)
+        setSaveStatus("error")
+      }
+    }
+
+    loadData()
+
+    // Hot reload listener for cross-tab sync (disabled in Electron, kept for fallback)
+    const handleStorageChange = async (e) => {
+      if (e.key === "todos.md") {
+        const newTodos = await electronAdapter.getTodos()
+        setTodos(newTodos || { active: [], completed: [] })
+      } else if (e.key === "tags.md") {
+        const newTags = await electronAdapter.getTags()
+        setTags(newTags || {})
+      } else if (e.key === "contacts.json") {
+        const newContacts = await electronAdapter.getContacts()
+        setContacts(newContacts || { companies: {}, tags: {} })
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
+  }, [])
+
+  // Placeholder for getDefaultConfig
+  const getDefaultConfig = () => ({
+    theme: "one-dark",
+    sidebarPosition: "left",
+    compactMode: false,
+    showCompletedByDefault: false,
+    defaultView: "company",
+  })
+
+  // Update filtered todos when search or company changes
+  useEffect(() => {
+    let filtered = { ...todos }
+
+    // Apply company filter
+    if (selectedCompany !== "All Companies") {
+      filtered = {
+        active: todos.active.filter((t) => t.company === selectedCompany),
+        completed: todos.completed.filter((t) => t.company === selectedCompany),
+      }
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      const searchResults = searchTodos(filtered, searchQuery)
+      filtered = {
+        active: searchResults.filter((t) => !t.completed),
+        completed: searchResults.filter((t) => t.completed),
+      }
+    }
+
+    setFilteredTodos(filtered)
+  }, [selectedCompany, searchQuery, todos])
+
+  // Update stats when todos change
+  useEffect(() => {
+    setStats(getCompanyStats(todos))
+  }, [todos])
+
+  // Save todos whenever they change (debounced)
+  useEffect(() => {
+    saveTodosFn(todos)
+  }, [todos, saveTodosFn])
+
+  // Save tags whenever they change (debounced)
+  useEffect(() => {
+    saveTagsFn(tags)
+  }, [tags, saveTagsFn])
+
+  // Save contacts whenever they change (debounced)
+  useEffect(() => {
+    saveContactsFn(contacts)
+  }, [contacts, saveContactsFn])
+
+  const addTodo = useCallback((todoData) => {
+    const newTodo = {
+      id: Date.now().toString(),
+      ...todoData,
+      completed: false,
+      date: new Date(todoData.date),
+    }
+
+    setTodos((prev) => ({
+      ...prev,
+      active: [...prev.active, newTodo],
+    }))
+  }, [])
+
+  const completeTodo = useCallback((todoId) => {
+    setTodos((prev) => {
+      const todo = prev.active.find((t) => t.id === todoId)
+      if (!todo) return prev
+
+      return {
+        active: prev.active.filter((t) => t.id !== todoId),
+        completed: [...prev.completed, { ...todo, completed: true }],
+      }
+    })
+  }, [])
+
+  const deleteTodo = useCallback((todoId, isCompleted = false) => {
+    setTodos((prev) => ({
+      ...prev,
+      active: isCompleted
+        ? prev.active
+        : prev.active.filter((t) => t.id !== todoId),
+      completed: isCompleted
+        ? prev.completed.filter((t) => t.id !== todoId)
+        : prev.completed,
+    }))
+  }, [])
+
+  const uncompleteTodo = useCallback((todoId) => {
+    setTodos((prev) => {
+      const todo = prev.completed.find((t) => t.id === todoId)
+      if (!todo) return prev
+
+      return {
+        active: [...prev.active, { ...todo, completed: false }],
+        completed: prev.completed.filter((t) => t.id !== todoId),
+      }
+    })
+  }, [])
+
+  const editTodo = useCallback((updatedTodo) => {
+    setTodos((prev) => {
+      const isCompleted = prev.completed.find((t) => t.id === updatedTodo.id)
+      const now = new Date().toISOString()
+
+      const updatedWithTimestamp = {
+        ...updatedTodo,
+        updatedAt: now,
+      }
+
+      if (isCompleted) {
+        return {
+          ...prev,
+          completed: prev.completed.map((t) =>
+            t.id === updatedTodo.id ? updatedWithTimestamp : t,
+          ),
+        }
+      } else {
+        return {
+          ...prev,
+          active: prev.active.map((t) =>
+            t.id === updatedTodo.id ? updatedWithTimestamp : t,
+          ),
+        }
+      }
+    })
+  }, [])
+
+  const addTag = useCallback((company, tagName) => {
+    setTags((prev) => {
+      const updated = { ...prev }
+      if (!updated[company]) {
+        updated[company] = []
+      }
+      if (!updated[company].includes(tagName)) {
+        updated[company].push(tagName)
+      }
+      return updated
+    })
+  }, [])
+
+  const removeTag = useCallback((company, tagName) => {
+    setTags((prev) => {
+      const updated = { ...prev }
+      if (updated[company]) {
+        updated[company] = updated[company].filter((t) => t !== tagName)
+        if (updated[company].length === 0) {
+          delete updated[company]
+        }
+      }
+      return updated
+    })
+  }, [])
+
+  const updateContact = useCallback((company, contact) => {
+    setContacts((prev) => {
+      const updated = { ...prev }
+      if (!updated.companies[company]) {
+        updated.companies[company] = { contacts: [] }
+      }
+      const existingIndex = updated.companies[company].contacts.findIndex(
+        (c) => c.id === contact.id,
+      )
+      if (existingIndex >= 0) {
+        updated.companies[company].contacts[existingIndex] = contact
+      } else {
+        updated.companies[company].contacts.push(contact)
+      }
+      return updated
+    })
+  }, [])
+
+  const removeContact = useCallback((company, contactId) => {
+    setContacts((prev) => {
+      const updated = { ...prev }
+      if (updated.companies[company]) {
+        updated.companies[company].contacts = updated.companies[
+          company
+        ].contacts.filter((c) => c.id !== contactId)
+      }
+      return updated
+    })
+  }, [])
+
+  const handleConfigChange = useCallback((newConfig) => {
+    setConfig(newConfig)
+    electronAdapter
+      .updateConfig(newConfig)
+      .catch((e) => console.error("Failed to save config:", e))
+  }, [])
+
+  const exportData = useCallback(
+    (fileType = "todos") => {
+      if (fileType === "todos") {
+        const content = generateMarkdownContent(todos)
+        downloadMarkdownFile("todos.md", content)
+      } else if (fileType === "tags") {
+        const content = generateTagsContent(tags)
+        downloadMarkdownFile("tags.md", content)
+      } else if (fileType === "contacts") {
+        downloadJsonFile("contacts.json", contacts)
+      } else if (fileType === "backup") {
+        electronAdapter
+          .exportBackup()
+          .then((backup) => {
+            const dataStr = JSON.stringify(backup, null, 2)
+            const dataUri =
+              "data:application/json;charset=utf-8," +
+              encodeURIComponent(dataStr)
+
+            const exportFileDefaultName = `backup-${new Date().toISOString().split("T")[0]}.json`
+
+            const linkElement = document.createElement("a")
+            linkElement.setAttribute("href", dataUri)
+            linkElement.setAttribute("download", exportFileDefaultName)
+            linkElement.click()
+
+            alert(
+              "✓ Full backup downloaded! This includes all TODOs, tags, contacts, and settings.",
+            )
+          })
+          .catch((e) => {
+            console.error("Failed to export backup:", e)
+            alert("Failed to export backup")
+          })
+      } else if (fileType === "snapshot") {
+        const snapshotKey = createSnapshot(todos, tags, contacts, config)
+        alert(`✓ Snapshot created: ${snapshotKey}`)
+      }
+    },
+    [todos, tags, contacts, config],
+  )
+
+  const accountReps = Array.from(
+    new Set(
+      [...todos.active, ...todos.completed]
+        .map((t) => t.accountRep)
+        .filter(Boolean),
+    ),
+  ).sort()
+
+  const card = "card"
+
+  return (
+    <div
+      className={`app theme-${config.theme} ${config.compactMode ? "compact" : ""}`}
+      data-layout={config.sidebarPosition}
+    >
+      <header>
+        <div className="header-top">
+          <h1>📋 Corporate TODO Tracker</h1>
+          <div className="header-actions">
+            <div className="save-status">
+              {saveStatus === "saving" && (
+                <span className="status-saving">💾 Saving...</span>
+              )}
+              {saveStatus === "saved" &&
+                storageInfo.storageType !== "Memory only (NO PERSISTENCE)" && (
+                  <span className="status-saved">✓ Saved</span>
+                )}
+              {saveStatus === "error" && (
+                <span className="status-error">⚠️ Save failed</span>
+              )}
+              {storageInfo.storageType === "Memory only (NO PERSISTENCE)" && (
+                <span className="status-warning">⚠️ No storage</span>
+              )}
+              <small
+                style={{ marginLeft: "8px", opacity: 0.7, fontSize: "11px" }}
+              >
+                ({storageInfo.storageType})
+              </small>
+            </div>
+            <div className="export-buttons">
+              <button
+                onClick={() => exportData("todos")}
+                className="btn-secondary"
+                title="Download all TODOs as markdown"
+              >
+                📄 Todos
+              </button>
+              <button
+                onClick={() => exportData("tags")}
+                className="btn-secondary"
+                title="Download all tags as markdown"
+              >
+                🏷️ Tags
+              </button>
+              <button
+                onClick={() => exportData("contacts")}
+                className="btn-secondary"
+                title="Download contacts as JSON"
+              >
+                👥 Contacts
+              </button>
+              <button
+                onClick={() => exportData("backup")}
+                className="btn-secondary"
+                title="Backup everything (TODOs, tags, contacts, settings)"
+              >
+                💼 Full Backup
+              </button>
+              <button
+                onClick={() => exportData("snapshot")}
+                className="btn-secondary"
+                title="Create internal snapshot for recovery"
+              >
+                📸 Snapshot
+              </button>
+              <button
+                onClick={() => setShowConfig(!showConfig)}
+                className="btn-secondary"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+                title="Open settings"
+              >
+                ⚙️ Settings
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="view-tabs">
+          <button
+            className={`tab-btn ${activeTab === "company" ? "active" : ""}`}
+            onClick={() => setActiveTab("company")}
+          >
+            🏢 Company View
+          </button>
+          <button
+            className={`tab-btn ${activeTab === "master" ? "active" : ""}`}
+            onClick={() => setActiveTab("master")}
+          >
+            📊 Master View
+          </button>
+          <button
+            className={`tab-btn ${activeTab === "tags" ? "active" : ""}`}
+            onClick={() => setActiveTab("tags")}
+          >
+            🏷️ Manage Tags
+          </button>
+        </div>
+
+        {(activeTab === "company" || activeTab === "master") && (
+          <div className="search-bar">
+            <input
+              type="text"
+              placeholder="🔍 Search todos by message, company, name, or account rep..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="btn-text">
+                ✕
+              </button>
+            )}
+          </div>
+        )}
+      </header>
+
+      <main>
+        <aside
+          className={`sidebar ${config.sidebarPosition === "right" ? "sidebar-right" : ""}`}
+        >
+          <Dashboard stats={stats} todos={todos} />
+          {activeTab === "company" && (
+            <CompanySelector
+              companies={companies}
+              selectedCompany={selectedCompany}
+              onSelectCompany={setSelectedCompany}
+              stats={stats}
+            />
+          )}
+          <ContactManager
+            contacts={contacts}
+            companies={companies}
+            onUpdateContact={updateContact}
+            onRemoveContact={removeContact}
+          />
+        </aside>
+
+        <section className="content">
+          {activeTab === "tags" ? (
+            <TagManager tags={tags} onAddTag={addTag} onRemoveTag={removeTag} />
+          ) : activeTab === "company" ? (
+            <>
+              <TodoForm onAddTodo={addTodo} companies={companies} tags={tags} />
+              <TodoList
+                active={filteredTodos.active}
+                completed={filteredTodos.completed}
+                onComplete={completeTodo}
+                onDelete={deleteTodo}
+                onUncomplete={uncompleteTodo}
+              />
+            </>
+          ) : (
+            <>
+              <TodoForm onAddTodo={addTodo} companies={companies} tags={tags} />
+              <MasterTodoView
+                todos={todos}
+                companies={companies}
+                accountReps={accountReps}
+                onComplete={completeTodo}
+                onDelete={deleteTodo}
+                onUncomplete={uncompleteTodo}
+                onSaveEdit={editTodo}
+              />
+            </>
+          )}
+        </section>
+      </main>
+
+      <ConfigManager
+        config={config}
+        onConfigChange={handleConfigChange}
+        showConfig={showConfig}
+        setShowConfig={setShowConfig}
+      />
+
+      <style>{`
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background-color: #f5f5f5;
+          color: #333;
+        }
+
+        .app {
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          transition: background-color 0.3s, color 0.3s;
+        }
+
+        .app.theme-modern-light {
+          --primary: #3498db;
+          --background: #f5f5f5;
+          --text: #2c3e50;
+          --card: #ffffff;
+          --border: #e0e0e0;
+          --text-muted: #999999;
+        }
+
+        .app.theme-one-light {
+          --primary: #4078f2;
+          --background: #fafafa;
+          --text: #383a42;
+          --card: #ffffff;
+          --border: #e0e0e0;
+          --text-muted: #999999;
+        }
+
+        .app.theme-github-light {
+          --primary: #0366d6;
+          --background: #ffffff;
+          --text: #24292e;
+          --card: #f6f8fa;
+          --border: #e0e0e0;
+          --text-muted: #999999;
+        }
+
+        .app.theme-solarized-light {
+          --primary: #268bd2;
+          --background: #fdf6e3;
+          --text: #2c3e50;
+          --card: #eee8d5;
+          --border: #d4cba8;
+          --text-muted: #999999;
+        }
+
+        .app.theme-modern-dark {
+          --primary: #3498db;
+          --background: #1e1e1e;
+          --text: #ecf0f1;
+          --card: #2d2d2d;
+          --border: #404040;
+          --text-muted: #999999;
+        }
+
+        .app.theme-one-dark {
+          --primary: #61afef;
+          --background: #282c34;
+          --text: #abb2bf;
+          --card: #3e4451;
+          --border: #565c64;
+          --text-muted: #848b96;
+        }
+
+        .app.theme-dracula {
+          --primary: #8be9fd;
+          --background: #282a36;
+          --text: #f8f8f2;
+          --card: #44475a;
+          --border: #6272a4;
+          --text-muted: #999999;
+        }
+
+        .app.theme-nord {
+          --primary: #88c0d0;
+          --background: #2e3440;
+          --text: #eceff4;
+          --card: #3b4252;
+          --border: #4c566a;
+          --text-muted: #999999;
+        }
+
+        .app.theme-solarized-dark {
+          --primary: #93a1a1;
+          --background: #002b36;
+          --text: #93a1a1;
+          --card: #073642;
+          --border: #166d90;
+          --text-muted: #507a8d;
+        }
+
+        .app.theme-gruvbox-dark {
+          --primary: #fe8019;
+          --background: #282828;
+          --text: #ebdbb2;
+          --card: #3c3836;
+          --border: #504945;
+          --text-muted: #928374;
+        }
+
+        .app.theme-github-dark {
+          --primary: #79c0ff;
+          --background: #0d1117;
+          --text: #e6edf3;
+          --card: #161b22;
+          --border: #30363d;
+          --text-muted: #8b949e;
+        }
+
+        .app.theme-forest {
+          --primary: #27ae60;
+          --background: #ecf0f1;
+          --text: #2c3e50;
+          --card: #ffffff;
+          --border: #e0e0e0;
+          --text-muted: #999999;
+        }
+
+        .app.theme-ocean {
+          --primary: #16a085;
+          --background: #f0f8ff;
+          --text: #1a3a52;
+          --card: #ffffff;
+          --border: #d4e6f1;
+          --text-muted: #999999;
+        }
+
+        .app.theme-sunset {
+          --primary: #e74c3c;
+          --background: #fdf5f0;
+          --text: #5d4037;
+          --card: #ffffff;
+          --border: #f0d5cf;
+          --text-muted: #999999;
+        }
+
+        .app.compact {
+          --spacing: 12px;
+          --font-size: 12px;
+        }
+
+        .app:not(.compact) {
+          --spacing: 20px;
+          --font-size: 14px;
+        }
+
+        header {
+          background: var(--card);
+          padding: 20px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          border-bottom: 2px solid var(--primary);
+        }
+
+        .header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+          gap: 20px;
+        }
+
+        .header-top h1 {
+          font-size: 28px;
+          color: var(--text);
+        }
+
+        .header-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .export-buttons {
+          display: flex;
+          gap: 8px;
+        }
+
+        .save-status {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 8px 12px;
+          background: rgba(52, 152, 219, 0.1);
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 600;
+          border: 1px solid var(--primary);
+        }
+
+        .status-saving {
+          color: #f39c12;
+          animation: pulse 1s infinite;
+        }
+
+        .status-saved {
+          color: #27ae60;
+        }
+
+        .status-error {
+          color: #e74c3c;
+        }
+
+        .status-warning {
+          color: #e67e22;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+
+        .view-tabs {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+        }
+
+        .tab-btn {
+          padding: 10px 16px;
+          background: #f0f0f0;
+          border: 2px solid transparent;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          transition: all 0.2s;
+          color: var(--text);
+        }
+
+        .tab-btn:hover {
+          border-color: var(--primary);
+        }
+
+        .tab-btn.active {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
+        }
+
+        .search-bar {
+          display: flex;
+          gap: 8px;
+        }
+
+        .search-bar input {
+          flex: 1;
+          padding: 12px 16px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+          background: var(--card);
+          color: var(--text);
+        }
+
+        .search-bar input:focus {
+          outline: none;
+          border-color: var(--primary);
+        }
+
+        main {
+          display: flex;
+          flex: 1;
+          padding: 20px;
+          gap: 20px;
+          max-width: 1400px;
+          margin: 0 auto;
+          width: 100%;
+          flex-direction: row;
+        }
+
+        main[data-layout="right"] {
+          flex-direction: row-reverse;
+        }
+
+        .sidebar {
+          width: 280px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          max-height: calc(100vh - 300px);
+          overflow-y: auto;
+        }
+
+        .sidebar-right {
+          order: 2;
+        }
+
+        .content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          min-width: 0;
+        }
+
+        .card {
+          background: var(--card);
+          border-radius: 6px;
+          padding: 16px;
+          border: 1px solid #e0e0e0;
+        }
+
+        .btn-primary {
+          background-color: var(--primary);
+          color: white;
+          border: none;
+          padding: 10px 16px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+          filter: brightness(0.9);
+        }
+
+        .btn-secondary {
+          background-color: #95a5a6;
+          color: white;
+          border: none;
+          padding: 10px 16px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          transition: background-color 0.2s;
+        }
+
+        .btn-secondary:hover {
+          background-color: #7f8c8d;
+        }
+
+        .btn-text {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--text);
+          font-size: 18px;
+          padding: 4px 8px;
+        }
+
+        @media (max-width: 1024px) {
+          main {
+            flex-direction: column;
+          }
+
+          main[data-layout="right"] {
+            flex-direction: column;
+          }
+
+          .sidebar {
+            width: 100%;
+            max-height: auto;
+            flex-direction: row;
+            gap: 12px;
+            overflow-x: auto;
+            overflow-y: hidden;
+          }
+
+          .sidebar > * {
+            min-width: 250px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          header {
+            padding: 12px;
+          }
+
+          .header-top {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+
+          .header-top h1 {
+            width: 100%;
+            font-size: 22px;
+          }
+
+          .header-actions {
+            width: 100%;
+            flex-direction: column;
+          }
+
+          .export-buttons {
+            width: 100%;
+            flex-direction: column;
+          }
+
+          .export-buttons button {
+            width: 100%;
+          }
+
+          .view-tabs {
+            width: 100%;
+          }
+
+          .view-tabs button {
+            flex: 1;
+          }
+
+          main {
+            padding: 12px;
+            gap: 12px;
+            flex-direction: column;
+          }
+
+          .sidebar {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            flex-direction: row;
+            max-height: auto;
+          }
+
+          .sidebar > * {
+            flex-shrink: 0;
+            min-width: calc(100vw - 40px);
+          }
+        }
+
+        @media (max-width: 480px) {
+          header {
+            padding: 8px;
+          }
+
+          .header-top h1 {
+            font-size: 18px;
+          }
+
+          main {
+            padding: 8px;
+            gap: 8px;
+          }
+
+          .sidebar > * {
+            min-width: calc(100vw - 24px);
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+export default App
