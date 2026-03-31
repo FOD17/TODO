@@ -11,26 +11,38 @@ import Sidebar from "./Sidebar"
 import MainFeed from "./MainFeed"
 import EditTodoDrawer from "./EditTodoDrawer"
 import ConfigManager from "./ConfigManager"
+import TodoDetailModal from "./TodoDetailModal"
+
+// Initialize tags with new format if needed
+const initializeTags = () => {
+  const loaded = loadTagsLocalStorageSync()
+  // If old format (object) or empty, convert to new format
+  if (typeof loaded !== "object" || loaded === null || !loaded.companies) {
+    return { companies: [], accountExecutives: [], companyAssignments: {}, labels: [] }
+  }
+  return { ...loaded, companyAssignments: loaded.companyAssignments || {}, labels: loaded.labels || [] }
+}
 
 function App() {
   const [todos, setTodos] = useState(loadTodosLocalStorageSync())
-  const [tags, setTags] = useState(loadTagsLocalStorageSync())
+  const [tags, setTags] = useState(initializeTags())
   const [config, setConfig] = useState(loadConfigLocalStorageSync())
   const [selectedCompany, setSelectedCompany] = useState("All")
   const [showConfig, setShowConfig] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [selectedTodo, setSelectedTodo] = useState(null)
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
+  const [detailTodo, setDetailTodo] = useState(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
-  // Get company list
-  const companies = useMemo(() => {
-    const companySet = new Set(
-      [...todos.active, ...todos.completed]
-        .map((t) => t.company)
-        .filter(Boolean),
-    )
-    return Array.from(companySet).sort()
-  }, [todos])
+  // Get company list — merge from todos AND tags
+  const allCompanies = useMemo(() => {
+    const fromTodos = [...todos.active, ...todos.completed]
+      .map((t) => t.company)
+      .filter(Boolean)
+    const fromTags = tags.companies || []
+    return Array.from(new Set([...fromTodos, ...fromTags])).sort()
+  }, [todos, tags])
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -48,7 +60,7 @@ function App() {
     })
 
     const companyStats = {}
-    companies.forEach((company) => {
+    allCompanies.forEach((company) => {
       companyStats[company] = todos.active.filter(
         (t) => t.company === company,
       ).length
@@ -60,7 +72,7 @@ function App() {
       overdue: overdueCount,
       ...companyStats,
     }
-  }, [todos, companies])
+  }, [todos, allCompanies])
 
   // Save todos
   const saveTodosFn = useRef(
@@ -71,9 +83,26 @@ function App() {
     }, 500),
   ).current
 
+  // Save tags
+  const saveTagsFn = useRef(
+    debounce((tagsData) => {
+      electronAdapter.saveTags(tagsData).catch((e) => {
+        console.error("Failed to save tags:", e)
+      })
+    }, 500),
+  ).current
+
   const handleConfigChange = useCallback((newConfig) => {
     setConfig(newConfig)
   }, [])
+
+  const handleTagsChange = useCallback(
+    (newTags) => {
+      setTags(newTags)
+      saveTagsFn(newTags)
+    },
+    [saveTagsFn],
+  )
 
   // Load data on mount
   useEffect(() => {
@@ -86,7 +115,20 @@ function App() {
         ])
 
         if (loadedTodos) setTodos(loadedTodos)
-        if (loadedTags) setTags(loadedTags)
+        if (loadedTags) {
+          setTags({
+            companies: Array.isArray(loadedTags.companies)
+              ? loadedTags.companies
+              : [],
+            accountExecutives: Array.isArray(loadedTags.accountExecutives)
+              ? loadedTags.accountExecutives
+              : [],
+            companyAssignments: loadedTags.companyAssignments || {},
+            labels: Array.isArray(loadedTags.labels)
+              ? loadedTags.labels
+              : [],
+          })
+        }
         if (loadedConfig) setConfig(loadedConfig)
       } catch (e) {
         console.error("Failed to load data:", e)
@@ -128,6 +170,8 @@ function App() {
         names: [],
         accountRep: "",
         description: "",
+        notes: [],
+        labels: [],
         completed: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -210,10 +254,12 @@ function App() {
       <div className="app-layout">
         {/* Sidebar */}
         <Sidebar
-          companies={companies}
+          allCompanies={allCompanies}
           selectedCompany={selectedCompany}
           onSelectCompany={setSelectedCompany}
           stats={stats}
+          tags={tags}
+          onTagsChange={handleTagsChange}
         />
 
         {/* Main Content */}
@@ -225,10 +271,31 @@ function App() {
             setSelectedTodo(todo)
             setIsEditDrawerOpen(true)
           }}
+          onClick={(todo) => {
+            setDetailTodo(todo)
+            setIsDetailOpen(true)
+          }}
           onAddQuick={addQuickTodo}
           selectedCompany={selectedCompany}
           showCompleted={showCompleted}
           onShowCompletedChange={setShowCompleted}
+          labels={tags.labels || []}
+        />
+
+        {/* Todo Detail Modal */}
+        <TodoDetailModal
+          todo={detailTodo}
+          isOpen={isDetailOpen}
+          onClose={() => {
+            setIsDetailOpen(false)
+            setDetailTodo(null)
+          }}
+          onSave={(updatedTodo) => {
+            editTodo(updatedTodo)
+            setIsDetailOpen(false)
+            setDetailTodo(null)
+          }}
+          labels={tags.labels || []}
         />
 
         {/* Edit Drawer */}
@@ -252,6 +319,8 @@ function App() {
           onConfigChange={handleConfigChange}
           showConfig={showConfig}
           setShowConfig={setShowConfig}
+          tags={tags}
+          onTagsChange={handleTagsChange}
         />
 
         {/* Floating Settings Button */}

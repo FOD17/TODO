@@ -266,7 +266,12 @@ export async function saveTagsLocalStorage(tags) {
 // Synchronous version for initial state
 export function loadTagsLocalStorageSync() {
   const content = localStorage.getItem(TAGS_FILENAME) || ""
-  return parseTagsFile(content)
+  if (!content) return {}
+  try {
+    return JSON.parse(content)
+  } catch {
+    return parseTagsFile(content)
+  }
 }
 
 /**

@@ -1,157 +1,44 @@
-import React from "react"
+import React, { useState } from "react"
 import { saveConfigLocalStorage } from "../utils/markdownHandler"
+import {
+  addCompany,
+  removeCompany,
+  addAccountExecutive,
+  updateAccountExecutive,
+  removeAccountExecutive,
+  getCompanies,
+  getAccountExecutives,
+  addLabel,
+  updateLabel,
+  removeLabel,
+  getLabels,
+  groupLabelsByTag,
+} from "../utils/tagManager"
 
-function ConfigManager({ config, onConfigChange, showConfig, setShowConfig }) {
-  // Note: showConfig and setShowConfig are now managed by parent (App.jsx)
+function ConfigManager({
+  config,
+  onConfigChange,
+  showConfig,
+  setShowConfig,
+  tags = {},
+  onTagsChange = () => {},
+}) {
+  const [activeTab, setActiveTab] = useState("theme")
+  const [newCompanyName, setNewCompanyName] = useState("")
+  const [newAEName, setNewAEName] = useState("")
+  const [newAEEmail, setNewAEEmail] = useState("")
+  const [editingAE, setEditingAE] = useState(null)
+  const [newLabelName, setNewLabelName] = useState("")
+  const [newLabelColor, setNewLabelColor] = useState("#3498db")
+  const [editingLabel, setEditingLabel] = useState(null)
 
-  const themes = {
-    // Light themes
-    "one-light": {
-      name: "One Light",
-      description: "Atom One Light - clean and readable",
-      colors: {
-        primary: "#4078f2",
-        background: "#fafafa",
-        text: "#383a42",
-        card: "#ffffff",
-      },
-    },
-    "github-light": {
-      name: "GitHub Light",
-      description: "GitHub's clean light theme",
-      colors: {
-        primary: "#0366d6",
-        background: "#ffffff",
-        text: "#24292e",
-        card: "#f6f8fa",
-      },
-    },
-    "solarized-light": {
-      name: "Solarized Light",
-      description: "Precision colors for machines and people",
-      colors: {
-        primary: "#268bd2",
-        background: "#fdf6e3",
-        text: "#657b83",
-        card: "#eee8d5",
-      },
-    },
-    "modern-light": {
-      name: "Modern Light",
-      description: "Clean, bright interface with blue accents",
-      colors: {
-        primary: "#3498db",
-        background: "#f5f5f5",
-        text: "#2c3e50",
-        card: "#ffffff",
-      },
-    },
-    // Dark themes
-    "one-dark": {
-      name: "One Dark",
-      description: "Atom One Dark - popular and vibrant",
-      colors: {
-        primary: "#61afef",
-        background: "#282c34",
-        text: "#abb2bf",
-        card: "#3e4451",
-      },
-    },
-    dracula: {
-      name: "Dracula",
-      description: "Dark theme with vibrant colors",
-      colors: {
-        primary: "#8be9fd",
-        background: "#282a36",
-        text: "#f8f8f2",
-        card: "#44475a",
-      },
-    },
-    nord: {
-      name: "Nord",
-      description: "Arctic, north-bluish color palette",
-      colors: {
-        primary: "#88c0d0",
-        background: "#2e3440",
-        text: "#eceff4",
-        card: "#3b4252",
-      },
-    },
-    "solarized-dark": {
-      name: "Solarized Dark",
-      description: "Precision colors for machines and people",
-      colors: {
-        primary: "#268bd2",
-        background: "#002b36",
-        text: "#839496",
-        card: "#073642",
-      },
-    },
-    "gruvbox-dark": {
-      name: "Gruvbox Dark",
-      description: "Retro groove color scheme",
-      colors: {
-        primary: "#83a598",
-        background: "#282828",
-        text: "#ebdbb2",
-        card: "#3c3836",
-      },
-    },
-    "github-dark": {
-      name: "GitHub Dark",
-      description: "GitHub's dark theme",
-      colors: {
-        primary: "#58a6ff",
-        background: "#0d1117",
-        text: "#c9d1d9",
-        card: "#161b22",
-      },
-    },
-    "modern-dark": {
-      name: "Modern Dark",
-      description: "Dark mode with soft contrast",
-      colors: {
-        primary: "#3498db",
-        background: "#1e1e1e",
-        text: "#ecf0f1",
-        card: "#2d2d2d",
-      },
-    },
-    // Colorful themes
-    forest: {
-      name: "Forest",
-      description: "Green-focused nature theme",
-      colors: {
-        primary: "#27ae60",
-        background: "#ecf0f1",
-        text: "#2c3e50",
-        card: "#ffffff",
-      },
-    },
-    ocean: {
-      name: "Ocean",
-      description: "Blue and teal ocean-inspired",
-      colors: {
-        primary: "#16a085",
-        background: "#f0f8ff",
-        text: "#1a3a52",
-        card: "#ffffff",
-      },
-    },
-    sunset: {
-      name: "Sunset",
-      description: "Warm orange and red tones",
-      colors: {
-        primary: "#e74c3c",
-        background: "#fdf5f0",
-        text: "#5d4037",
-        card: "#ffffff",
-      },
-    },
-  }
+  const companies = getCompanies(tags)
+  const accountExecutives = getAccountExecutives(tags)
+  const allLabels = getLabels(tags)
+  const grouped = groupLabelsByTag(allLabels)
 
-  const handleThemeChange = (themeKey) => {
-    const newConfig = { ...config, theme: themeKey }
+  const handleThemeChange = (theme) => {
+    const newConfig = { ...config, theme }
     saveConfigLocalStorage(newConfig)
     onConfigChange(newConfig)
   }
@@ -160,6 +47,127 @@ function ConfigManager({ config, onConfigChange, showConfig, setShowConfig }) {
     const newConfig = { ...config, [key]: value }
     saveConfigLocalStorage(newConfig)
     onConfigChange(newConfig)
+  }
+
+  const handleAddCompany = (e) => {
+    e.preventDefault()
+    if (newCompanyName.trim()) {
+      const updatedTags = addCompany(tags, newCompanyName.trim())
+      onTagsChange(updatedTags)
+      setNewCompanyName("")
+    }
+  }
+
+  const handleRemoveCompany = (company) => {
+    const updatedTags = removeCompany(tags, company)
+    onTagsChange(updatedTags)
+  }
+
+  const handleAddAccountExecutive = (e) => {
+    e.preventDefault()
+    if (newAEName.trim()) {
+      const updatedTags = addAccountExecutive(
+        tags,
+        newAEName.trim(),
+        newAEEmail.trim(),
+      )
+      onTagsChange(updatedTags)
+      setNewAEName("")
+      setNewAEEmail("")
+    }
+  }
+
+  const handleUpdateAccountExecutive = (e) => {
+    e.preventDefault()
+    if (editingAE && newAEName.trim()) {
+      const updatedTags = updateAccountExecutive(
+        tags,
+        editingAE.id,
+        newAEName.trim(),
+        newAEEmail.trim(),
+      )
+      onTagsChange(updatedTags)
+      setNewAEName("")
+      setNewAEEmail("")
+      setEditingAE(null)
+    }
+  }
+
+  const handleRemoveAccountExecutive = (id) => {
+    const updatedTags = removeAccountExecutive(tags, id)
+    onTagsChange(updatedTags)
+  }
+
+  const startEditingAE = (ae) => {
+    setEditingAE(ae)
+    setNewAEName(ae.name)
+    setNewAEEmail(ae.email || "")
+  }
+
+  const handleAddLabel = (e) => {
+    e.preventDefault()
+    if (newLabelName.trim()) {
+      const updatedTags = addLabel(tags, newLabelName.trim(), newLabelColor)
+      onTagsChange(updatedTags)
+      setNewLabelName("")
+      setNewLabelColor("#3498db")
+    }
+  }
+
+  const handleUpdateLabel = (e) => {
+    e.preventDefault()
+    if (editingLabel && newLabelName.trim()) {
+      const updatedTags = updateLabel(
+        tags,
+        editingLabel.id,
+        newLabelName.trim(),
+        newLabelColor,
+      )
+      onTagsChange(updatedTags)
+      setNewLabelName("")
+      setNewLabelColor("#3498db")
+      setEditingLabel(null)
+    }
+  }
+
+  const handleRemoveLabel = (id) => {
+    const updatedTags = removeLabel(tags, id)
+    onTagsChange(updatedTags)
+  }
+
+  const startEditingLabel = (label) => {
+    setEditingLabel(label)
+    setNewLabelName(label.name)
+    setNewLabelColor(label.color)
+  }
+
+  const themes = {
+    "modern-light": {
+      name: "Modern Light",
+      description: "Clean, bright interface",
+    },
+    "one-light": { name: "One Light", description: "Atom One Light" },
+    "github-light": {
+      name: "GitHub Light",
+      description: "GitHub's clean light theme",
+    },
+    "solarized-light": {
+      name: "Solarized Light",
+      description: "Precision colors",
+    },
+    "modern-dark": {
+      name: "Modern Dark",
+      description: "Dark mode with contrast",
+    },
+    "one-dark": { name: "One Dark", description: "Atom One Dark" },
+    dracula: { name: "Dracula", description: "Dark theme" },
+    nord: { name: "Nord", description: "Arctic palette" },
+    "solarized-dark": { name: "Solarized Dark", description: "Solarized dark" },
+    "gruvbox-dark": { name: "Gruvbox Dark", description: "Retro groove" },
+    "github-dark": { name: "GitHub Dark", description: "GitHub dark" },
+    forest: { name: "Forest", description: "Green nature theme" },
+    ocean: { name: "Ocean", description: "Blue ocean theme" },
+    sunset: { name: "Sunset", description: "Warm sunset colors" },
   }
 
   return (
@@ -177,122 +185,350 @@ function ConfigManager({ config, onConfigChange, showConfig, setShowConfig }) {
               </button>
             </div>
 
-            <div className="config-content">
-              <section className="config-section">
-                <h3>Theme</h3>
-                <div className="themes-grid">
-                  {Object.entries(themes).map(([key, theme]) => (
-                    <button
-                      key={key}
-                      className={`theme-card ${config.theme === key ? "active" : ""}`}
-                      onClick={() => handleThemeChange(key)}
-                    >
-                      <div className="theme-preview">
-                        <div
-                          className="color-swatch primary"
-                          style={{
-                            backgroundColor: theme.colors.primary,
-                          }}
-                        ></div>
-                        <div
-                          className="color-swatch bg"
-                          style={{
-                            backgroundColor: theme.colors.background,
-                          }}
-                        ></div>
-                      </div>
-                      <h4>{theme.name}</h4>
-                      <p>{theme.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="config-section">
-                <h3>Layout</h3>
-                <div className="config-option">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={config.compactMode}
-                      onChange={(e) =>
-                        handleConfigChange("compactMode", e.target.checked)
-                      }
-                    />
-                    Compact Mode
-                  </label>
-                  <span className="help-text">
-                    Reduce spacing and font sizes
-                  </span>
-                </div>
-
-                <div className="config-option">
-                  <label>
-                    Sidebar Position: <strong>{config.sidebarPosition}</strong>
-                  </label>
-                  <div className="btn-group">
-                    <button
-                      className={`btn-opt ${config.sidebarPosition === "left" ? "active" : ""}`}
-                      onClick={() =>
-                        handleConfigChange("sidebarPosition", "left")
-                      }
-                    >
-                      Left
-                    </button>
-                    <button
-                      className={`btn-opt ${config.sidebarPosition === "right" ? "active" : ""}`}
-                      onClick={() =>
-                        handleConfigChange("sidebarPosition", "right")
-                      }
-                    >
-                      Right
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="config-section">
-                <h3>Default View</h3>
-                <div className="btn-group">
-                  <button
-                    className={`btn-opt ${config.defaultView === "company" ? "active" : ""}`}
-                    onClick={() => handleConfigChange("defaultView", "company")}
-                  >
-                    Company View
-                  </button>
-                  <button
-                    className={`btn-opt ${config.defaultView === "master" ? "active" : ""}`}
-                    onClick={() => handleConfigChange("defaultView", "master")}
-                  >
-                    Master View
-                  </button>
-                </div>
-              </section>
-
-              <section className="config-section">
-                <h3>Display Options</h3>
-                <div className="config-option">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={config.showCompletedByDefault}
-                      onChange={(e) =>
-                        handleConfigChange(
-                          "showCompletedByDefault",
-                          e.target.checked,
-                        )
-                      }
-                    />
-                    Show Completed TODOs by Default
-                  </label>
-                </div>
-              </section>
+            <div className="config-tabs">
+              <button
+                className={`tab-btn ${activeTab === "theme" ? "active" : ""}`}
+                onClick={() => setActiveTab("theme")}
+              >
+                🎨 Theme
+              </button>
+              <button
+                className={`tab-btn ${activeTab === "companies" ? "active" : ""}`}
+                onClick={() => setActiveTab("companies")}
+              >
+                🏢 Companies
+              </button>
+              <button
+                className={`tab-btn ${activeTab === "executives" ? "active" : ""}`}
+                onClick={() => setActiveTab("executives")}
+              >
+                👤 Account Executives
+              </button>
+              <button
+                className={`tab-btn ${activeTab === "labels" ? "active" : ""}`}
+                onClick={() => setActiveTab("labels")}
+              >
+                🏷 Tags
+              </button>
             </div>
 
-            <div className="config-footer">
-              <p className="info-text">
-                ✓ Settings are saved automatically to your browser
-              </p>
+            <div className="config-content">
+              {activeTab === "theme" && (
+                <>
+                  <section className="config-section">
+                    <h3>Color Theme</h3>
+                    <div className="themes-grid">
+                      {Object.entries(themes).map(([key, theme]) => (
+                        <button
+                          key={key}
+                          className={`theme-card ${config.theme === key ? "active" : ""}`}
+                          onClick={() => handleThemeChange(key)}
+                        >
+                          <div className="theme-name">{theme.name}</div>
+                          <div className="theme-desc">{theme.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="config-section">
+                    <h3>Layout Options</h3>
+                    <div className="config-option">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={config.compactMode || false}
+                          onChange={(e) =>
+                            handleConfigChange("compactMode", e.target.checked)
+                          }
+                        />
+                        Compact Mode
+                      </label>
+                      <span className="help-text">
+                        Reduce spacing and font sizes
+                      </span>
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {activeTab === "companies" && (
+                <>
+                  <section className="config-section">
+                    <h3>Add New Company</h3>
+                    <form onSubmit={handleAddCompany} className="tag-form">
+                      <input
+                        type="text"
+                        placeholder="Company name (e.g., Acme Corp)"
+                        value={newCompanyName}
+                        onChange={(e) => setNewCompanyName(e.target.value)}
+                        className="tag-input"
+                      />
+                      <button type="submit" className="tag-btn-add">
+                        ➕ Add Company
+                      </button>
+                    </form>
+                  </section>
+
+                  <section className="config-section">
+                    <h3>Companies ({companies.length})</h3>
+                    {companies.length > 0 ? (
+                      <div className="tag-list">
+                        {companies.map((company) => (
+                          <div key={company} className="tag-item">
+                            <div className="tag-item-content">
+                              <span className="tag-icon">🏢</span>
+                              <span className="tag-name">{company}</span>
+                            </div>
+                            <button
+                              onClick={() => handleRemoveCompany(company)}
+                              className="tag-btn-delete"
+                              title="Delete company"
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="empty-message">
+                        No companies added yet. Add one above!
+                      </p>
+                    )}
+                  </section>
+                </>
+              )}
+
+              {activeTab === "executives" && (
+                <>
+                  <section className="config-section">
+                    <h3>{editingAE ? "Edit" : "Add New"} Account Executive</h3>
+                    <form
+                      onSubmit={
+                        editingAE
+                          ? handleUpdateAccountExecutive
+                          : handleAddAccountExecutive
+                      }
+                      className="tag-form"
+                    >
+                      <input
+                        type="text"
+                        placeholder="Name (e.g., John Smith)"
+                        value={newAEName}
+                        onChange={(e) => setNewAEName(e.target.value)}
+                        className="tag-input"
+                        required
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email (optional)"
+                        value={newAEEmail}
+                        onChange={(e) => setNewAEEmail(e.target.value)}
+                        className="tag-input"
+                      />
+                      <div className="form-buttons">
+                        <button type="submit" className="tag-btn-add">
+                          {editingAE ? "💾 Update" : "➕ Add"} Executive
+                        </button>
+                        {editingAE && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAE(null)
+                              setNewAEName("")
+                              setNewAEEmail("")
+                            }}
+                            className="tag-btn-cancel"
+                          >
+                            ✕ Cancel
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </section>
+
+                  <section className="config-section">
+                    <h3>Account Executives ({accountExecutives.length})</h3>
+                    {accountExecutives.length > 0 ? (
+                      <div className="tag-list">
+                        {accountExecutives.map((ae) => (
+                          <div key={ae.id} className="tag-item">
+                            <div className="tag-item-content">
+                              <span className="tag-icon">👤</span>
+                              <div className="ae-info">
+                                <span className="ae-name">{ae.name}</span>
+                                {ae.email && (
+                                  <span className="ae-email">{ae.email}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="tag-actions">
+                              <button
+                                onClick={() => startEditingAE(ae)}
+                                className="tag-btn-edit"
+                                title="Edit"
+                              >
+                                ✎
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleRemoveAccountExecutive(ae.id)
+                                }
+                                className="tag-btn-delete"
+                                title="Delete"
+                              >
+                                🗑
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="empty-message">
+                        No account executives added yet. Add one above!
+                      </p>
+                    )}
+                  </section>
+                </>
+              )}
+
+              {activeTab === "labels" && (
+                <>
+                  <section className="config-section">
+                    <h3>{editingLabel ? "Edit" : "Create New"} Label</h3>
+                    <p className="label-help-text">
+                      Use <code>tag:subtag</code> format for scoped labels (e.g., status:pending, priority:high)
+                    </p>
+                    <form
+                      onSubmit={editingLabel ? handleUpdateLabel : handleAddLabel}
+                      className="tag-form"
+                    >
+                      <input
+                        type="text"
+                        placeholder="Label name (e.g., status:pending)"
+                        value={newLabelName}
+                        onChange={(e) => setNewLabelName(e.target.value)}
+                        className="tag-input"
+                        required
+                      />
+                      <div className="label-color-row">
+                        <label className="label-color-label">Color:</label>
+                        <div className="label-color-options">
+                          {[
+                            "#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c",
+                            "#3498db", "#9b59b6", "#e91e63", "#607d8b", "#795548",
+                          ].map((color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              className={`label-color-swatch ${newLabelColor === color ? "active" : ""}`}
+                              style={{ background: color }}
+                              onClick={() => setNewLabelColor(color)}
+                              title={color}
+                            />
+                          ))}
+                          <input
+                            type="color"
+                            value={newLabelColor}
+                            onChange={(e) => setNewLabelColor(e.target.value)}
+                            className="label-color-custom"
+                            title="Custom color"
+                          />
+                        </div>
+                      </div>
+                      {/* Preview */}
+                      {newLabelName.trim() && (
+                        <div className="label-preview">
+                          <span className="label-preview-text">Preview:</span>
+                          <span
+                            className="label-preview-pill"
+                            style={{
+                              background: `${newLabelColor}22`,
+                              color: newLabelColor,
+                              border: `1px solid ${newLabelColor}44`,
+                            }}
+                          >
+                            {newLabelName.trim()}
+                          </span>
+                        </div>
+                      )}
+                      <div className="form-buttons">
+                        <button type="submit" className="tag-btn-add">
+                          {editingLabel ? "💾 Update" : "➕ Add"} Label
+                        </button>
+                        {editingLabel && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLabel(null)
+                              setNewLabelName("")
+                              setNewLabelColor("#3498db")
+                            }}
+                            className="tag-btn-cancel"
+                          >
+                            ✕ Cancel
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </section>
+
+                  <section className="config-section">
+                    <h3>Labels ({allLabels.length})</h3>
+                    {allLabels.length > 0 ? (
+                      <div className="label-groups">
+                        {Object.entries(grouped).map(([group, groupLabels]) => (
+                          <div key={group} className="label-group">
+                            <div className="label-group-header">{group}</div>
+                            <div className="tag-list">
+                              {groupLabels.map((label) => (
+                                <div key={label.id} className="tag-item">
+                                  <div className="tag-item-content">
+                                    <span
+                                      className="label-dot"
+                                      style={{ background: label.color }}
+                                    />
+                                    <span
+                                      className="label-pill-display"
+                                      style={{
+                                        background: `${label.color}22`,
+                                        color: label.color,
+                                        border: `1px solid ${label.color}44`,
+                                      }}
+                                    >
+                                      {label.name}
+                                    </span>
+                                  </div>
+                                  <div className="tag-actions">
+                                    <button
+                                      onClick={() => startEditingLabel(label)}
+                                      className="tag-btn-edit"
+                                      title="Edit"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveLabel(label.id)}
+                                      className="tag-btn-delete"
+                                      title="Delete"
+                                    >
+                                      🗑
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="empty-message">
+                        No labels created yet. Add one above!
+                      </p>
+                    )}
+                  </section>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -305,35 +541,50 @@ function ConfigManager({ config, onConfigChange, showConfig, setShowConfig }) {
           left: 0;
           right: 0;
           bottom: 0;
-          background-color: rgba(0, 0, 0, 0.5);
+          background: rgba(0, 0, 0, 0.5);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 999;
-          padding: 20px;
+          z-index: 1000;
+          animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
 
         .config-modal {
           background: var(--card);
           border-radius: 12px;
           box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-          max-width: 600px;
-          width: 100%;
-          max-height: 80vh;
-          overflow-y: auto;
-          color: var(--text);
+          width: 90%;
+          max-width: 700px;
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+          from {
+            transform: translateY(20px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
         }
 
         .config-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 24px;
-          border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-          position: sticky;
-          top: 0;
-          background: var(--card);
-          z-index: 100;
+          padding: 20px;
+          border-bottom: 1px solid var(--border);
+          flex-shrink: 0;
         }
 
         .config-header h2 {
@@ -348,185 +599,485 @@ function ConfigManager({ config, onConfigChange, showConfig, setShowConfig }) {
           font-size: 24px;
           cursor: pointer;
           color: var(--text);
-          opacity: 0.5;
           padding: 0;
-          transition: opacity 0.2s;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 6px;
+          transition: all 0.2s;
         }
 
         .btn-close:hover {
-          opacity: 1;
+          background: var(--background);
+          color: var(--primary);
+        }
+
+        .config-tabs {
+          display: flex;
+          gap: 4px;
+          padding: 12px 20px;
+          border-bottom: 1px solid var(--border);
+          overflow-x: auto;
+          flex-shrink: 0;
+        }
+
+        .tab-btn {
+          padding: 8px 16px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 6px;
+          cursor: pointer;
+          color: var(--text-muted);
+          font-weight: 600;
+          font-size: 14px;
+          transition: all 0.2s;
+          white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+          background: var(--background);
+          color: var(--text);
+        }
+
+        .tab-btn.active {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
         }
 
         .config-content {
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          gap: 24px;
+          flex: 1;
+          overflow-y: auto;
+          padding: 20px;
         }
 
         .config-section {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+          margin-bottom: 24px;
         }
 
         .config-section h3 {
-          margin: 0 0 12px 0;
-          font-size: 14px;
+          margin: 0 0 12px;
+          font-size: 16px;
           color: var(--text);
-          opacity: 0.7;
           font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .themes-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-          gap: 12px;
-        }
-
-        .theme-card {
-          background: var(--card);
-          border: 2px solid;
-          border-color: rgba(0, 0, 0, 0.1);
-          border-radius: 8px;
-          padding: 12px;
-          cursor: pointer;
-          transition: all 0.2s;
-          text-align: center;
-          color: var(--text);
-        }
-
-        .theme-card:hover {
-          border-color: var(--primary);
-          box-shadow: 0 4px 12px var(--primary);
-          opacity: 0.8;
-        }
-
-        .theme-card.active {
-          border-color: var(--primary);
-          background-color: rgba(0, 0, 0, 0.05);
-          box-shadow: 0 0 0 3px var(--primary);
-          opacity: 0.2;
-        }
-
-        .theme-preview {
-          display: flex;
-          gap: 4px;
-          margin-bottom: 8px;
-        }
-
-        .color-swatch {
-          flex: 1;
-          height: 30px;
-          border-radius: 4px;
-        }
-
-        .theme-card h4 {
-          margin: 8px 0 4px 0;
-          font-size: 13px;
-          color: var(--text);
-        }
-
-        .theme-card p {
-          margin: 0;
-          font-size: 11px;
-          color: var(--text);
-          opacity: 0.6;
-          line-height: 1.3;
         }
 
         .config-option {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
+          margin-bottom: 12px;
         }
 
         .config-option label {
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: 13px;
           cursor: pointer;
           color: var(--text);
+          font-size: 14px;
         }
 
         .config-option input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
           cursor: pointer;
-          width: 16px;
-          height: 16px;
-          accent-color: var(--primary);
         }
 
         .help-text {
           display: block;
           font-size: 12px;
-          color: var(--text);
-          opacity: 0.6;
-          margin-left: 24px;
+          color: var(--text-muted);
+          margin-top: 4px;
+          margin-left: 26px;
         }
 
-        .btn-group {
+        .themes-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .theme-card {
+          background: var(--background);
+          color: var(--text);
+          border: 2px solid var(--border);
+          border-radius: 8px;
+          padding: 14px;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-align: center;
+          min-height: 80px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          position: relative;
+        }
+
+        .theme-card:hover {
+          border-color: var(--primary);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          transform: translateY(-2px);
+        }
+
+        .theme-card:focus-visible {
+          outline: 2px solid var(--primary);
+          outline-offset: 2px;
+        }
+
+        .theme-card.active {
+          border-color: var(--primary);
+          box-shadow: 0 0 0 3px var(--primary), 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .theme-card.active::after {
+          content: "✓";
+          position: absolute;
+          top: 6px;
+          right: 8px;
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--primary);
+        }
+
+        .theme-name {
+          font-weight: 700;
+          font-size: 15px;
+          margin-bottom: 6px;
+          line-height: 1.3;
+          color: var(--text);
+        }
+
+        .theme-desc {
+          font-size: 13px;
+          line-height: 1.4;
+          color: var(--text-muted);
+        }
+
+        .tag-form {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .tag-input {
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          font-size: 14px;
+          color: var(--text);
+          background: var(--background);
+          font-family: inherit;
+        }
+
+        .tag-input:focus {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+        }
+
+        .tag-input::placeholder {
+          color: var(--text-muted);
+        }
+
+        .form-buttons {
           display: flex;
           gap: 8px;
         }
 
-        .btn-opt {
-          flex: 1;
-          padding: 8px 12px;
-          background-color: var(--card);
-          border: 1px solid;
-          border-color: rgba(0, 0, 0, 0.1);
-          border-radius: 4px;
+        .tag-form button {
+          position: relative;
+          z-index: 1;
+        }
+
+        .tag-btn-add,
+        .tag-btn-cancel {
+          padding: 11px 16px;
+          border: none;
+          border-radius: 6px;
           cursor: pointer;
-          font-size: 13px;
-          font-weight: 500;
+          font-weight: 600;
+          font-size: 14px;
+          transition: all 0.3s ease;
+          flex: 1;
+          white-space: nowrap;
+        }
+
+        .tag-btn-add {
+          background: var(--primary);
+          color: white;
+          box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
+        }
+
+        .tag-btn-add:hover {
+          opacity: 0.95;
+          box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+          transform: translateY(-1px);
+        }
+
+        .tag-btn-add:active {
+          transform: translateY(0);
+        }
+
+        .tag-btn-cancel {
+          background: var(--background);
           color: var(--text);
+          border: 1px solid var(--border);
+        }
+
+        .tag-btn-cancel:hover {
+          background: var(--border);
+        }
+
+        .tag-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .tag-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px;
+          background: var(--background);
+          border: 1px solid var(--border);
+          border-radius: 6px;
           transition: all 0.2s;
         }
 
-        .btn-opt:hover {
+        .tag-item:hover {
           border-color: var(--primary);
-          background-color: rgba(0, 0, 0, 0.05);
+          background: var(--card);
         }
 
-        .btn-opt.active {
-          background-color: var(--primary);
-          color: white;
-          border-color: var(--primary);
+        .tag-item-content {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+          min-width: 0;
         }
 
-        .config-footer {
-          padding: 16px 24px;
-          border-top: 1px solid;
-          border-color: rgba(0, 0, 0, 0.1);
-          background-color: var(--card);
+        .tag-icon {
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+
+        .tag-name {
+          color: var(--text);
+          font-weight: 600;
+          font-size: 14px;
+        }
+
+        .ae-info {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          text-align: left;
+        }
+
+        .ae-name {
+          color: var(--text);
+          font-weight: 600;
+          font-size: 14px;
+        }
+
+        .ae-email {
+          color: var(--text-muted);
+          font-size: 12px;
+        }
+
+        .tag-actions {
+          display: flex;
+          gap: 4px;
+          flex-shrink: 0;
+        }
+
+        .tag-btn-edit,
+        .tag-btn-delete {
+          background: transparent;
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          padding: 4px 8px;
+          font-size: 14px;
+          transition: all 0.2s;
+          color: var(--text);
+        }
+
+        .tag-btn-edit:hover {
+          border-color: #3498db;
+          color: #3498db;
+        }
+
+        .tag-btn-delete:hover {
+          border-color: #e74c3c;
+          color: #e74c3c;
+        }
+
+        .empty-message {
           text-align: center;
+          padding: 20px;
+          color: var(--text-muted);
+          font-size: 14px;
+          font-style: italic;
+          margin: 0;
         }
 
-        .info-text {
-          margin: 0;
+        .config-content::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .config-content::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .config-content::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 3px;
+        }
+
+        .config-content::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
+        }
+
+        /* Labels tab */
+        .label-help-text {
+          font-size: 13px;
+          color: var(--text-muted);
+          margin: 0 0 12px;
+          line-height: 1.4;
+        }
+
+        .label-help-text code {
+          background: var(--background);
+          padding: 2px 6px;
+          border-radius: 3px;
           font-size: 12px;
           color: var(--primary);
         }
 
-        @media (max-width: 768px) {
+        .label-color-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .label-color-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text);
+          flex-shrink: 0;
+        }
+
+        .label-color-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          align-items: center;
+        }
+
+        .label-color-swatch {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          border: 2px solid transparent;
+          cursor: pointer;
+          transition: all 0.15s;
+          padding: 0;
+        }
+
+        .label-color-swatch:hover {
+          transform: scale(1.15);
+        }
+
+        .label-color-swatch.active {
+          border-color: var(--text);
+          box-shadow: 0 0 0 2px var(--card);
+        }
+
+        .label-color-custom {
+          width: 24px;
+          height: 24px;
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          padding: 0;
+          background: none;
+        }
+
+        .label-preview {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .label-preview-text {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+
+        .label-preview-pill {
+          display: inline-flex;
+          align-items: center;
+          padding: 3px 10px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .label-groups {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .label-group-header {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 6px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .label-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+
+        .label-pill-display {
+          display: inline-flex;
+          align-items: center;
+          padding: 3px 10px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        @media (max-width: 600px) {
           .config-modal {
-            max-height: 90vh;
-          }
-
-          .config-header {
-            padding: 16px;
-          }
-
-          .config-content {
-            padding: 16px;
-            gap: 16px;
+            width: 95%;
+            max-height: 95vh;
           }
 
           .themes-grid {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+          }
+
+          .config-tabs {
+            flex-wrap: wrap;
+          }
+
+          .form-buttons {
+            flex-direction: column;
           }
         }
       `}</style>

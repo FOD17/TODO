@@ -115,8 +115,25 @@ class ElectronAdapter {
     if (this.hasElectron) {
       return window.electron.getTags()
     }
-    const tags = localStorage.getItem("tags")
-    return tags ? JSON.parse(tags) : {}
+    // Check both keys for backwards compatibility
+    const tags =
+      localStorage.getItem("tags.md") || localStorage.getItem("tags")
+    if (tags) {
+      try {
+        const parsed = JSON.parse(tags)
+        return {
+          companies: Array.isArray(parsed.companies) ? parsed.companies : [],
+          accountExecutives: Array.isArray(parsed.accountExecutives)
+            ? parsed.accountExecutives
+            : [],
+          companyAssignments: parsed.companyAssignments || {},
+          labels: Array.isArray(parsed.labels) ? parsed.labels : [],
+        }
+      } catch {
+        return { companies: [], accountExecutives: [], companyAssignments: {}, labels: [] }
+      }
+    }
+    return { companies: [], accountExecutives: [], companyAssignments: {}, labels: [] }
   }
 
   async saveTags(tagsData) {
@@ -124,8 +141,10 @@ class ElectronAdapter {
     if (this.hasElectron) {
       return window.electron.saveTags(tagsData)
     }
-    // Fallback
-    localStorage.setItem("tags", JSON.stringify(tagsData))
+    // Fallback - save to both keys for consistency
+    const json = JSON.stringify(tagsData)
+    localStorage.setItem("tags.md", json)
+    localStorage.setItem("tags", json)
     return tagsData
   }
 

@@ -6,10 +6,12 @@ function MainFeed({
   onComplete,
   onDelete,
   onEdit,
+  onClick,
   onAddQuick,
   selectedCompany,
   showCompleted,
   onShowCompletedChange,
+  labels = [],
 }) {
   const [quickMessage, setQuickMessage] = useState("")
   const [quickDate, setQuickDate] = useState(
@@ -51,7 +53,7 @@ function MainFeed({
       {/* Header with stats */}
       <div className="feed-header">
         <div className="header-content">
-          <h1>Your Tasks</h1>
+          <h1>{selectedCompany === "All" ? "Your Tasks" : selectedCompany}</h1>
           {activeCount > 0 && (
             <div className="progress-bar">
               <div
@@ -100,7 +102,9 @@ function MainFeed({
                 onComplete={onComplete}
                 onDelete={onDelete}
                 onEdit={onEdit}
+                onClick={onClick}
                 isCompleted={false}
+                labels={labels}
               />
             ))}
           </div>
@@ -133,7 +137,9 @@ function MainFeed({
                   onComplete={onComplete}
                   onDelete={onDelete}
                   onEdit={onEdit}
+                  onClick={onClick}
                   isCompleted={true}
+                  labels={labels}
                 />
               ))}
             </div>

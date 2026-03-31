@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 
-function TodoCard({ todo, onComplete, onDelete, onEdit, isCompleted }) {
+function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, labels = [] }) {
   const [isHovered, setIsHovered] = useState(false)
 
   const formatDate = (date) => {
@@ -37,7 +37,11 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, isCompleted }) {
       className={`todo-card ${isCompleted ? "completed" : ""}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      style={{ borderLeftColor: getPriorityColor() }}
+      style={{ borderLeftColor: getPriorityColor(), cursor: "pointer" }}
+      onClick={(e) => {
+        if (e.target.closest(".card-checkbox") || e.target.closest(".card-actions")) return
+        if (onClick) onClick(todo)
+      }}
     >
       <div className="card-checkbox">
         <input
@@ -56,6 +60,28 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, isCompleted }) {
           <p className="card-description">{todo.description}</p>
         )}
 
+        {/* Label pills */}
+        {todo.labels?.length > 0 && (
+          <div className="card-labels">
+            {todo.labels.map((labelName) => {
+              const def = labels.find((l) => l.name === labelName)
+              return (
+                <span
+                  key={labelName}
+                  className="card-label-pill"
+                  style={{
+                    background: def ? `${def.color}22` : "rgba(52,152,219,0.12)",
+                    color: def ? def.color : "#3498db",
+                    border: `1px solid ${def ? `${def.color}44` : "rgba(52,152,219,0.25)"}`,
+                  }}
+                >
+                  {labelName}
+                </span>
+              )
+            })}
+          </div>
+        )}
+
         <div className="card-meta">
           <span className="meta-badge date">{formatDate(todo.date)}</span>
           {todo.company && (
@@ -67,6 +93,11 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, isCompleted }) {
           {todo.names?.length > 0 && (
             <span className="meta-badge people">
               👥 {todo.names.join(", ")}
+            </span>
+          )}
+          {todo.notes?.length > 0 && (
+            <span className="meta-badge notes-count">
+              📝 {todo.notes.length} note{todo.notes.length !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -192,6 +223,22 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, isCompleted }) {
           word-break: break-word;
         }
 
+        .card-labels {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-bottom: 8px;
+        }
+
+        .card-label-pill {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
         .card-meta {
           display: flex;
           flex-wrap: wrap;
@@ -230,6 +277,11 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, isCompleted }) {
         .meta-badge.people {
           background: rgba(245, 176, 65, 0.1);
           color: #d68910;
+        }
+
+        .meta-badge.notes-count {
+          background: rgba(149, 165, 166, 0.1);
+          color: #7f8c8d;
         }
 
         .card-actions {
