@@ -7,6 +7,9 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [editingNoteText, setEditingNoteText] = useState("")
   const [showLabelPicker, setShowLabelPicker] = useState(false)
+  const [newSubtask, setNewSubtask] = useState("")
+  const [editingSubtaskId, setEditingSubtaskId] = useState(null)
+  const [editingSubtaskText, setEditingSubtaskText] = useState("")
   const noteInputRef = useRef(null)
 
   useEffect(() => {
@@ -16,10 +19,13 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
         notes: todo.notes || [],
         labels: todo.labels || [],
         names: todo.names || [],
+        subtasks: todo.subtasks || [],
       })
       setNewNote("")
       setNewPerson("")
+      setNewSubtask("")
       setEditingNoteId(null)
+      setEditingSubtaskId(null)
       setShowLabelPicker(false)
     }
   }, [todo, isOpen])
@@ -99,6 +105,72 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
       }
     })
   }
+
+  // Subtask handlers
+  const handleAddSubtask = () => {
+    if (!newSubtask.trim()) return
+    const subtask = {
+      id: Date.now().toString(),
+      message: newSubtask.trim(),
+      completed: false,
+      completedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    setEditedTodo((prev) => ({
+      ...prev,
+      subtasks: [...prev.subtasks, subtask],
+    }))
+    setNewSubtask("")
+  }
+
+  const handleToggleSubtask = (subtaskId) => {
+    setEditedTodo((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.map((st) =>
+        st.id === subtaskId
+          ? {
+              ...st,
+              completed: !st.completed,
+              completedAt: !st.completed ? new Date().toISOString() : null,
+              updatedAt: new Date().toISOString(),
+            }
+          : st,
+      ),
+    }))
+  }
+
+  const handleEditSubtask = (subtaskId) => {
+    const st = editedTodo.subtasks.find((s) => s.id === subtaskId)
+    if (st) {
+      setEditingSubtaskId(subtaskId)
+      setEditingSubtaskText(st.message)
+    }
+  }
+
+  const handleSaveSubtaskEdit = () => {
+    if (!editingSubtaskText.trim()) return
+    setEditedTodo((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.map((st) =>
+        st.id === editingSubtaskId
+          ? { ...st, message: editingSubtaskText.trim(), updatedAt: new Date().toISOString() }
+          : st,
+      ),
+    }))
+    setEditingSubtaskId(null)
+    setEditingSubtaskText("")
+  }
+
+  const handleDeleteSubtask = (subtaskId) => {
+    setEditedTodo((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.filter((st) => st.id !== subtaskId),
+    }))
+  }
+
+  const completedSubtasks = editedTodo ? editedTodo.subtasks.filter((st) => st.completed).length : 0
+  const totalSubtasks = editedTodo ? editedTodo.subtasks.length : 0
 
   const handleSave = () => {
     onSave({
@@ -253,6 +325,127 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
                 No labels defined yet. Create labels in Settings &gt; Tags.
               </p>
             )}
+          </div>
+
+          {/* Subtasks */}
+          <div className="detail-section">
+            <label className="detail-label">
+              Subtasks
+              {totalSubtasks > 0 && (
+                <span className="subtask-progress-text">
+                  {" "}{completedSubtasks}/{totalSubtasks} done
+                </span>
+              )}
+            </label>
+
+            {/* Subtask progress bar */}
+            {totalSubtasks > 0 && (
+              <div className="subtask-progress-bar">
+                <div
+                  className="subtask-progress-fill"
+                  style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+                />
+              </div>
+            )}
+
+            {/* Add subtask */}
+            <div className="subtask-add-row">
+              <input
+                type="text"
+                className="subtask-add-input"
+                value={newSubtask}
+                onChange={(e) => setNewSubtask(e.target.value)}
+                placeholder="Add a subtask..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    handleAddSubtask()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="subtask-add-btn"
+                onClick={handleAddSubtask}
+                disabled={!newSubtask.trim()}
+              >
+                +
+              </button>
+            </div>
+
+            {/* Subtask list */}
+            <div className="subtask-list">
+              {editedTodo.subtasks.map((st) => (
+                <div key={st.id} className={`subtask-item ${st.completed ? "completed" : ""}`}>
+                  {editingSubtaskId === st.id ? (
+                    <div className="subtask-edit-row">
+                      <input
+                        type="text"
+                        className="subtask-edit-input"
+                        value={editingSubtaskText}
+                        onChange={(e) => setEditingSubtaskText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            handleSaveSubtaskEdit()
+                          } else if (e.key === "Escape") {
+                            setEditingSubtaskId(null)
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <button className="subtask-save-btn" onClick={handleSaveSubtaskEdit}>
+                        Save
+                      </button>
+                      <button
+                        className="subtask-cancel-btn"
+                        onClick={() => setEditingSubtaskId(null)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="subtask-left">
+                        <input
+                          type="checkbox"
+                          className="subtask-checkbox"
+                          checked={st.completed}
+                          onChange={() => handleToggleSubtask(st.id)}
+                        />
+                        <span className={`subtask-text ${st.completed ? "done" : ""}`}>
+                          {st.message}
+                        </span>
+                      </div>
+                      <div className="subtask-actions">
+                        {st.completed && st.completedAt && (
+                          <span className="subtask-completed-date">
+                            {formatTimestamp(st.completedAt)}
+                          </span>
+                        )}
+                        <button
+                          className="subtask-action-btn"
+                          onClick={() => handleEditSubtask(st.id)}
+                          title="Edit subtask"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="subtask-action-btn delete"
+                          onClick={() => handleDeleteSubtask(st.id)}
+                          title="Delete subtask"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {editedTodo.subtasks.length === 0 && (
+                <p className="detail-empty-hint">No subtasks yet.</p>
+              )}
+            </div>
           </div>
 
           {/* People */}
@@ -951,6 +1144,232 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
           color: var(--text-muted);
           font-style: italic;
           margin: 0;
+        }
+
+        /* Subtasks */
+        .subtask-progress-text {
+          font-weight: 500;
+          font-size: 11px;
+          color: var(--primary);
+          text-transform: none;
+          letter-spacing: 0;
+        }
+
+        .subtask-progress-bar {
+          height: 4px;
+          background: var(--border);
+          border-radius: 2px;
+          overflow: hidden;
+          margin-bottom: 10px;
+        }
+
+        .subtask-progress-fill {
+          height: 100%;
+          background: var(--primary);
+          border-radius: 2px;
+          transition: width 0.3s ease;
+        }
+
+        .subtask-add-row {
+          display: flex;
+          gap: 6px;
+          margin-bottom: 8px;
+        }
+
+        .subtask-add-input {
+          flex: 1;
+          padding: 7px 10px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          font-size: 13px;
+          color: var(--text);
+          background: var(--background);
+          font-family: inherit;
+        }
+
+        .subtask-add-input:focus {
+          outline: none;
+          border-color: var(--primary);
+        }
+
+        .subtask-add-input::placeholder {
+          color: var(--text-muted);
+        }
+
+        .subtask-add-btn {
+          background: var(--primary);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          width: 30px;
+          height: 30px;
+          cursor: pointer;
+          font-size: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .subtask-add-btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .subtask-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .subtask-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 10px;
+          background: var(--background);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          transition: border-color 0.15s;
+          gap: 8px;
+        }
+
+        .subtask-item:hover {
+          border-color: var(--primary);
+        }
+
+        .subtask-item.completed {
+          opacity: 0.7;
+        }
+
+        .subtask-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .subtask-checkbox {
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border: 2px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          background: var(--card);
+          flex-shrink: 0;
+          position: relative;
+        }
+
+        .subtask-checkbox:checked {
+          background: var(--primary);
+          border-color: var(--primary);
+        }
+
+        .subtask-checkbox:checked::after {
+          content: "✓";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          font-size: 10px;
+          font-weight: bold;
+        }
+
+        .subtask-text {
+          font-size: 13px;
+          color: var(--text);
+          word-break: break-word;
+        }
+
+        .subtask-text.done {
+          text-decoration: line-through;
+          color: var(--text-muted);
+        }
+
+        .subtask-actions {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-shrink: 0;
+          opacity: 0;
+          transition: opacity 0.15s;
+        }
+
+        .subtask-item:hover .subtask-actions {
+          opacity: 1;
+        }
+
+        .subtask-completed-date {
+          font-size: 10px;
+          color: var(--text-muted);
+          white-space: nowrap;
+        }
+
+        .subtask-action-btn {
+          background: none;
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          padding: 2px 5px;
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+
+        .subtask-action-btn:hover {
+          border-color: var(--primary);
+          color: var(--primary);
+        }
+
+        .subtask-action-btn.delete:hover {
+          border-color: #e74c3c;
+          color: #e74c3c;
+        }
+
+        .subtask-edit-row {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+          width: 100%;
+        }
+
+        .subtask-edit-input {
+          flex: 1;
+          padding: 5px 8px;
+          border: 1px solid var(--primary);
+          border-radius: 4px;
+          font-size: 13px;
+          color: var(--text);
+          background: var(--card);
+          font-family: inherit;
+        }
+
+        .subtask-edit-input:focus {
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.15);
+        }
+
+        .subtask-save-btn {
+          padding: 4px 10px;
+          background: var(--primary);
+          color: white;
+          border: none;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .subtask-cancel-btn {
+          background: none;
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          padding: 3px 6px;
+          font-size: 11px;
+          color: var(--text-muted);
         }
 
         /* Timestamps */

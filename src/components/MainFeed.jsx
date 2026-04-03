@@ -1,5 +1,5 @@
-import React, { useState } from "react"
 import TodoCard from "./TodoCard"
+import AddTaskForm from "./AddTaskForm"
 
 function MainFeed({
   todos,
@@ -7,17 +7,16 @@ function MainFeed({
   onDelete,
   onEdit,
   onClick,
-  onAddQuick,
+  onSave,
+  onAdd,
   selectedCompany,
   showCompleted,
   onShowCompletedChange,
   labels = [],
+  companies = [],
+  accountExecutives = [],
+  companyAssignments = {},
 }) {
-  const [quickMessage, setQuickMessage] = useState("")
-  const [quickDate, setQuickDate] = useState(
-    new Date().toISOString().split("T")[0],
-  )
-
   const filteredActive =
     selectedCompany === "All"
       ? todos.active
@@ -27,19 +26,6 @@ function MainFeed({
     selectedCompany === "All"
       ? todos.completed
       : todos.completed.filter((t) => t.company === selectedCompany)
-
-  const handleQuickAdd = (e) => {
-    e.preventDefault()
-    if (!quickMessage.trim()) return
-
-    onAddQuick({
-      message: quickMessage.trim(),
-      date: quickDate,
-    })
-
-    setQuickMessage("")
-    setQuickDate(new Date().toISOString().split("T")[0])
-  }
 
   const activeCount = filteredActive.length
   const completedCount = filteredCompleted.length
@@ -70,25 +56,15 @@ function MainFeed({
         </div>
       </div>
 
-      {/* Quick add */}
-      <form className="quick-add" onSubmit={handleQuickAdd}>
-        <input
-          type="text"
-          placeholder="Quick add a task..."
-          value={quickMessage}
-          onChange={(e) => setQuickMessage(e.target.value)}
-          className="quick-input"
-        />
-        <input
-          type="date"
-          value={quickDate}
-          onChange={(e) => setQuickDate(e.target.value)}
-          className="quick-date"
-        />
-        <button type="submit" className="quick-btn">
-          ➕ Add
-        </button>
-      </form>
+      {/* Add Task Form */}
+      <AddTaskForm
+        onAdd={onAdd}
+        selectedCompany={selectedCompany}
+        companies={companies}
+        accountExecutives={accountExecutives}
+        labels={labels}
+        companyAssignments={companyAssignments}
+      />
 
       {/* Active TODOs */}
       {activeCount > 0 ? (
@@ -103,6 +79,7 @@ function MainFeed({
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onClick={onClick}
+                onSave={onSave}
                 isCompleted={false}
                 labels={labels}
               />
@@ -138,6 +115,7 @@ function MainFeed({
                   onDelete={onDelete}
                   onEdit={onEdit}
                   onClick={onClick}
+                  onSave={onSave}
                   isCompleted={true}
                   labels={labels}
                 />
@@ -190,87 +168,6 @@ function MainFeed({
           font-size: 12px;
           color: var(--text-muted);
           font-weight: 600;
-        }
-
-        /* Quick Add Form */
-        .quick-add {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 32px;
-          padding: 12px;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          animation: slideDown 0.3s ease;
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .quick-input {
-          flex: 1;
-          border: none;
-          background: var(--background);
-          padding: 10px 12px;
-          border-radius: 8px;
-          font-size: 14px;
-          color: var(--text);
-          font-family: inherit;
-        }
-
-        .quick-input::placeholder {
-          color: var(--text-muted);
-        }
-
-        .quick-input:focus {
-          outline: none;
-          background: var(--background);
-          box-shadow: 0 0 0 2px var(--primary);
-        }
-
-        .quick-date {
-          border: none;
-          background: var(--background);
-          padding: 10px 12px;
-          border-radius: 8px;
-          font-size: 14px;
-          color: var(--text);
-          cursor: pointer;
-          width: 120px;
-        }
-
-        .quick-date:focus {
-          outline: none;
-          box-shadow: 0 0 0 2px var(--primary);
-        }
-
-        .quick-btn {
-          background: var(--primary);
-          color: white;
-          border: none;
-          padding: 10px 16px;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-          font-size: 14px;
-        }
-
-        .quick-btn:hover {
-          opacity: 0.9;
-          transform: scale(1.02);
-        }
-
-        .quick-btn:active {
-          transform: scale(0.98);
         }
 
         /* Sections */

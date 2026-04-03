@@ -147,8 +147,15 @@ function App() {
   const addTodo = useCallback((todoData) => {
     const newTodo = {
       id: Date.now().toString(),
-      ...todoData,
+      message: todoData.message,
+      date: todoData.date,
+      company: todoData.company || "",
+      accountRep: todoData.accountRep || "",
+      names: todoData.names || [],
       description: todoData.description || "",
+      notes: todoData.notes || [],
+      labels: todoData.labels || [],
+      subtasks: todoData.subtasks || [],
       completed: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -159,31 +166,6 @@ function App() {
       active: [newTodo, ...prev.active],
     }))
   }, [])
-
-  const addQuickTodo = useCallback(
-    (todoData) => {
-      const newTodo = {
-        id: Date.now().toString(),
-        message: todoData.message,
-        date: todoData.date,
-        company: selectedCompany === "All" ? "" : selectedCompany,
-        names: [],
-        accountRep: "",
-        description: "",
-        notes: [],
-        labels: [],
-        completed: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-
-      setTodos((prev) => ({
-        ...prev,
-        active: [newTodo, ...prev.active],
-      }))
-    },
-    [selectedCompany],
-  )
 
   const completeTodo = useCallback((todoId) => {
     setTodos((prev) => {
@@ -275,11 +257,15 @@ function App() {
             setDetailTodo(todo)
             setIsDetailOpen(true)
           }}
-          onAddQuick={addQuickTodo}
+          onSave={editTodo}
+          onAdd={addTodo}
           selectedCompany={selectedCompany}
           showCompleted={showCompleted}
           onShowCompletedChange={setShowCompleted}
           labels={tags.labels || []}
+          companies={allCompanies}
+          accountExecutives={tags.accountExecutives || []}
+          companyAssignments={tags.companyAssignments || {}}
         />
 
         {/* Todo Detail Modal */}

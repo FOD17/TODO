@@ -409,6 +409,103 @@ describe("ElectronAdapter Persistence Tests", () => {
     })
   })
 
+  // ============ 8b. Subtasks field preservation ============
+
+  describe("Subtasks field preservation", () => {
+    it("should preserve subtasks array through save/load cycle", async () => {
+      const todosData = {
+        active: [
+          {
+            id: "sub-1",
+            message: "Task with subtasks",
+            company: "Acme",
+            date: "2026-04-01",
+            names: [],
+            accountRep: "Jane",
+            completed: 0,
+            subtasks: [
+              {
+                id: "st1",
+                message: "Subtask A",
+                completed: false,
+                completedAt: null,
+                createdAt: "2026-03-25T10:00:00.000Z",
+                updatedAt: "2026-03-25T10:00:00.000Z",
+              },
+              {
+                id: "st2",
+                message: "Subtask B",
+                completed: true,
+                completedAt: "2026-03-26T12:00:00.000Z",
+                createdAt: "2026-03-25T10:00:00.000Z",
+                updatedAt: "2026-03-26T12:00:00.000Z",
+              },
+            ],
+          },
+        ],
+        completed: [],
+      }
+
+      await electronAdapter.saveTodos(todosData)
+      const loaded = await electronAdapter.getTodos()
+
+      expect(loaded.active[0].subtasks).toHaveLength(2)
+      expect(loaded.active[0].subtasks[0].message).toBe("Subtask A")
+      expect(loaded.active[0].subtasks[0].completed).toBe(false)
+      expect(loaded.active[0].subtasks[1].message).toBe("Subtask B")
+      expect(loaded.active[0].subtasks[1].completed).toBe(true)
+      expect(loaded.active[0].subtasks[1].completedAt).toBe("2026-03-26T12:00:00.000Z")
+    })
+
+    it("should preserve empty subtasks array", async () => {
+      const todosData = {
+        active: [
+          {
+            id: "sub-2",
+            message: "Task without subtasks",
+            subtasks: [],
+          },
+        ],
+        completed: [],
+      }
+
+      await electronAdapter.saveTodos(todosData)
+      const loaded = await electronAdapter.getTodos()
+
+      expect(loaded.active[0].subtasks).toEqual([])
+      expect(Array.isArray(loaded.active[0].subtasks)).toBe(true)
+    })
+
+    it("should preserve subtasks on completed todos", async () => {
+      const todosData = {
+        active: [],
+        completed: [
+          {
+            id: "sub-3",
+            message: "Completed parent",
+            completed: 1,
+            subtasks: [
+              {
+                id: "st1",
+                message: "Child task",
+                completed: true,
+                completedAt: "2026-03-26T12:00:00.000Z",
+                createdAt: "2026-03-25T10:00:00.000Z",
+                updatedAt: "2026-03-26T12:00:00.000Z",
+              },
+            ],
+          },
+        ],
+      }
+
+      await electronAdapter.saveTodos(todosData)
+      const loaded = await electronAdapter.getTodos()
+
+      expect(loaded.completed[0].subtasks).toHaveLength(1)
+      expect(loaded.completed[0].subtasks[0].completed).toBe(true)
+    })
+  })
+
   // ============ 9. Backup/restore ============
 
   describe("Backup and restore", () => {

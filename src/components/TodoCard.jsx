@@ -1,7 +1,18 @@
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 
-function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, labels = [] }) {
+function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompleted, labels = [] }) {
   const [isHovered, setIsHovered] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addType, setAddType] = useState("subtask")
+  const [addText, setAddText] = useState("")
+  const addInputRef = useRef(null)
+
+  const subtasks = todo.subtasks || []
+  const notes = todo.notes || []
+  const totalItems = subtasks.length + notes.length
+  const hasItems = totalItems > 0
+  const showModal = totalItems > 4
 
   const formatDate = (date) => {
     const d = new Date(date)
@@ -27,10 +38,93 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, la
     today.setHours(0, 0, 0, 0)
     d.setHours(0, 0, 0, 0)
 
-    if (d < today) return "#e74c3c" // Red - Overdue
-    if (d.getTime() === today.getTime()) return "#f39c12" // Orange - Today
-    return "#3498db" // Blue - Future
+    if (d < today) return "#e74c3c"
+    if (d.getTime() === today.getTime()) return "#f39c12"
+    return "#3498db"
   }
+
+  const handleExpandToggle = (e) => {
+    e.stopPropagation()
+    if (!hasItems && !showAddForm) {
+      handlePlusClick(e)
+      return
+    }
+    if (showModal) {
+      if (onClick) onClick(todo)
+    } else {
+      setIsExpanded((prev) => !prev)
+    }
+  }
+
+  const handlePlusClick = (e) => {
+    e.stopPropagation()
+    setShowAddForm((prev) => !prev)
+    if (!showAddForm) {
+      setIsExpanded(true)
+      setTimeout(() => addInputRef.current?.focus(), 50)
+    }
+  }
+
+  const handleAddItem = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!addText.trim() || !onSave) return
+
+    let updatedTodo
+    if (addType === "subtask") {
+      const subtask = {
+        id: Date.now().toString(),
+        message: addText.trim(),
+        completed: false,
+        completedAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      updatedTodo = {
+        ...todo,
+        subtasks: [...subtasks, subtask],
+        updatedAt: new Date().toISOString(),
+      }
+    } else {
+      const note = {
+        id: Date.now().toString(),
+        text: addText.trim(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      updatedTodo = {
+        ...todo,
+        notes: [note, ...notes],
+        updatedAt: new Date().toISOString(),
+      }
+    }
+
+    onSave(updatedTodo)
+    setAddText("")
+    setIsExpanded(true)
+    addInputRef.current?.focus()
+  }
+
+  const handleToggleSubtask = (e, subtaskId) => {
+    e.stopPropagation()
+    if (!onSave) return
+    onSave({
+      ...todo,
+      subtasks: subtasks.map((st) =>
+        st.id === subtaskId
+          ? {
+              ...st,
+              completed: !st.completed,
+              completedAt: !st.completed ? new Date().toISOString() : null,
+              updatedAt: new Date().toISOString(),
+            }
+          : st,
+      ),
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  const completedSubtasks = subtasks.filter((s) => s.completed).length
 
   return (
     <div
@@ -39,7 +133,12 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, la
       onMouseLeave={() => setIsHovered(false)}
       style={{ borderLeftColor: getPriorityColor(), cursor: "pointer" }}
       onClick={(e) => {
-        if (e.target.closest(".card-checkbox") || e.target.closest(".card-actions")) return
+        if (
+          e.target.closest(".card-checkbox") ||
+          e.target.closest(".card-actions") ||
+          e.target.closest(".card-expandable")
+        )
+          return
         if (onClick) onClick(todo)
       }}
     >
@@ -95,15 +194,120 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, la
               👥 {todo.names.join(", ")}
             </span>
           )}
-          {todo.notes?.length > 0 && (
-            <span className="meta-badge notes-count">
-              📝 {todo.notes.length} note{todo.notes.length !== 1 ? "s" : ""}
-            </span>
+          {hasItems && (
+            <button
+              className="meta-badge items-toggle card-expandable"
+              onClick={handleExpandToggle}
+              title={showModal ? "View all in detail" : isExpanded ? "Collapse" : "Expand"}
+            >
+              {subtasks.length > 0 && (
+                <>
+                  <span className="subtask-mini-bar">
+                    <span
+                      className="subtask-mini-fill"
+                      style={{
+                        width: `${(completedSubtasks / subtasks.length) * 100}%`,
+                      }}
+                    />
+                  </span>
+                  {completedSubtasks}/{subtasks.length}
+                </>
+              )}
+              {notes.length > 0 && (
+                <span className="notes-inline-badge">
+                  📝 {notes.length}
+                </span>
+              )}
+              <span className="expand-chevron">
+                {showModal ? "↗" : isExpanded ? "▴" : "▾"}
+              </span>
+            </button>
           )}
         </div>
+
+        {/* Inline expanded items (≤ 4 total) */}
+        {isExpanded && !showModal && hasItems && (
+          <div className="card-items-expanded card-expandable" onClick={(e) => e.stopPropagation()}>
+            {subtasks.map((st) => (
+              <div
+                key={st.id}
+                className={`card-subtask-item ${st.completed ? "done" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={st.completed}
+                  onChange={(e) => handleToggleSubtask(e, st.id)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <span className="subtask-text">{st.message}</span>
+              </div>
+            ))}
+            {notes.map((note) => (
+              <div key={note.id} className="card-note-item">
+                <span className="note-icon">📝</span>
+                <span className="note-text">{note.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick add form */}
+        {showAddForm && (
+          <form
+            className="card-add-form card-expandable"
+            onSubmit={handleAddItem}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="add-type-row">
+              <button
+                type="button"
+                className={`type-tab ${addType === "subtask" ? "active" : ""}`}
+                onClick={() => setAddType("subtask")}
+              >
+                Subtask
+              </button>
+              <button
+                type="button"
+                className={`type-tab ${addType === "note" ? "active" : ""}`}
+                onClick={() => setAddType("note")}
+              >
+                Note
+              </button>
+            </div>
+            <div className="add-input-row">
+              <input
+                ref={addInputRef}
+                className="add-input"
+                value={addText}
+                onChange={(e) => setAddText(e.target.value)}
+                placeholder={addType === "subtask" ? "Add a subtask..." : "Add a note..."}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setShowAddForm(false)
+                    setAddText("")
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                className="add-submit-btn"
+                disabled={!addText.trim()}
+              >
+                Add
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       <div className={`card-actions ${isHovered ? "visible" : ""}`}>
+        <button
+          className="action-btn plus-btn"
+          onClick={handlePlusClick}
+          title="Add subtask or note"
+        >
+          +
+        </button>
         <button
           className="action-btn edit-btn"
           onClick={() => onEdit(todo)}
@@ -279,11 +483,204 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, la
           color: #d68910;
         }
 
-        .meta-badge.notes-count {
-          background: rgba(149, 165, 166, 0.1);
-          color: #7f8c8d;
+        .meta-badge.items-toggle {
+          background: rgba(52, 152, 219, 0.08);
+          color: var(--primary);
+          gap: 6px;
+          font-weight: 600;
+          border: none;
+          cursor: pointer;
+          transition: background 0.15s;
         }
 
+        .meta-badge.items-toggle:hover {
+          background: rgba(52, 152, 219, 0.18);
+        }
+
+        .subtask-mini-bar {
+          width: 32px;
+          height: 4px;
+          background: var(--border);
+          border-radius: 2px;
+          overflow: hidden;
+          display: inline-block;
+          vertical-align: middle;
+        }
+
+        .subtask-mini-fill {
+          display: block;
+          height: 100%;
+          background: var(--primary);
+          border-radius: 2px;
+          transition: width 0.3s ease;
+        }
+
+        .notes-inline-badge {
+          opacity: 0.85;
+        }
+
+        .expand-chevron {
+          font-size: 10px;
+          opacity: 0.7;
+        }
+
+        /* Expanded inline items */
+        .card-items-expanded {
+          margin-top: 10px;
+          border-top: 1px solid var(--border);
+          padding-top: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .card-subtask-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: var(--text);
+        }
+
+        .card-subtask-item input[type="checkbox"] {
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border: 2px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          background: var(--card);
+          flex-shrink: 0;
+          position: relative;
+          transition: all 0.2s;
+        }
+
+        .card-subtask-item input[type="checkbox"]:checked {
+          background: var(--primary);
+          border-color: var(--primary);
+        }
+
+        .card-subtask-item input[type="checkbox"]:checked::after {
+          content: "✓";
+          display: block;
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          font-size: 10px;
+          font-weight: bold;
+        }
+
+        .card-subtask-item.done .subtask-text {
+          text-decoration: line-through;
+          color: var(--text-muted);
+        }
+
+        .subtask-text {
+          line-height: 1.4;
+        }
+
+        .card-note-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+
+        .note-icon {
+          flex-shrink: 0;
+          font-size: 12px;
+          margin-top: 1px;
+        }
+
+        .note-text {
+          line-height: 1.4;
+          word-break: break-word;
+        }
+
+        /* Quick add form */
+        .card-add-form {
+          margin-top: 10px;
+          border-top: 1px solid var(--border);
+          padding-top: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .add-type-row {
+          display: flex;
+          gap: 4px;
+        }
+
+        .type-tab {
+          background: transparent;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 3px 10px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          color: var(--text-muted);
+          transition: all 0.15s;
+        }
+
+        .type-tab.active {
+          background: var(--primary);
+          border-color: var(--primary);
+          color: #fff;
+        }
+
+        .type-tab:not(.active):hover {
+          border-color: var(--primary);
+          color: var(--primary);
+        }
+
+        .add-input-row {
+          display: flex;
+          gap: 6px;
+        }
+
+        .add-input {
+          flex: 1;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 5px 10px;
+          font-size: 13px;
+          background: var(--background);
+          color: var(--text);
+          outline: none;
+          transition: border-color 0.15s;
+        }
+
+        .add-input:focus {
+          border-color: var(--primary);
+        }
+
+        .add-submit-btn {
+          background: var(--primary);
+          color: #fff;
+          border: none;
+          border-radius: 6px;
+          padding: 5px 12px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: opacity 0.15s;
+        }
+
+        .add-submit-btn:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
+
+        .add-submit-btn:not(:disabled):hover {
+          opacity: 0.85;
+        }
+
+        /* Card actions */
         .card-actions {
           display: flex;
           gap: 4px;
@@ -313,6 +710,16 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, isCompleted, la
         .action-btn:hover {
           border-color: var(--primary);
           background: var(--background);
+        }
+
+        .plus-btn {
+          font-size: 18px;
+          font-weight: 300;
+          line-height: 1;
+        }
+
+        .plus-btn:hover {
+          color: var(--primary);
         }
 
         .edit-btn:hover {

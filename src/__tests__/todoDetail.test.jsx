@@ -120,7 +120,9 @@ describe("TodoDetailModal", () => {
   it("can add a person and shows the person as a chip", () => {
     renderModal()
     const input = screen.getByPlaceholderText("Add person...")
-    const addBtn = screen.getByRole("button", { name: "+" })
+    const addBtn = screen.getAllByRole("button", { name: "+" }).find(
+      (btn) => btn.classList.contains("person-add-btn"),
+    )
 
     fireEvent.change(input, { target: { value: "Alice Johnson" } })
     fireEvent.click(addBtn)
@@ -144,7 +146,9 @@ describe("TodoDetailModal", () => {
     renderModal({ todo: makeTodo({ names: ["Alice Johnson"] }) })
 
     const input = screen.getByPlaceholderText("Add person...")
-    const addBtn = screen.getByRole("button", { name: "+" })
+    const addBtn = screen.getAllByRole("button", { name: "+" }).find(
+      (btn) => btn.classList.contains("person-add-btn"),
+    )
 
     fireEvent.change(input, { target: { value: "Alice Johnson" } })
     fireEvent.click(addBtn)
@@ -418,7 +422,10 @@ describe("TodoDetailModal", () => {
     // Add a person
     const personInput = screen.getByPlaceholderText("Add person...")
     fireEvent.change(personInput, { target: { value: "Charlie" } })
-    fireEvent.click(screen.getByRole("button", { name: "+" }))
+    const personAddBtn = screen.getAllByRole("button", { name: "+" }).find(
+      (btn) => btn.classList.contains("person-add-btn"),
+    )
+    fireEvent.click(personAddBtn)
 
     // Open label picker and add a label
     fireEvent.click(screen.getByRole("button", { name: "+ Add" }))
@@ -546,7 +553,9 @@ describe("TodoDetailModal", () => {
     renderModal()
 
     const input = screen.getByPlaceholderText("Add person...")
-    const addBtn = screen.getByRole("button", { name: "+" })
+    const addBtn = screen.getAllByRole("button", { name: "+" }).find(
+      (btn) => btn.classList.contains("person-add-btn"),
+    )
 
     fireEvent.change(input, { target: { value: "   " } })
     fireEvent.click(addBtn)
@@ -594,5 +603,226 @@ describe("TodoDetailModal", () => {
     ]
     renderModal({ todo: makeTodo({ notes }) })
     expect(screen.getByText((content) => content.includes("(edited)"))).toBeInTheDocument()
+  })
+
+  // -----------------------------------------------------------------------
+  // Subtask tests
+  // -----------------------------------------------------------------------
+  describe("Subtasks", () => {
+    it("shows subtasks section header", () => {
+      renderModal()
+      expect(screen.getByText((content) => content.includes("Subtasks"))).toBeInTheDocument()
+    })
+
+    it("can add a subtask", () => {
+      renderModal()
+
+      const input = screen.getByPlaceholderText("Add a subtask...")
+      fireEvent.change(input, { target: { value: "My subtask" } })
+
+      // The subtask add button is "+" — find it via its class
+      const addBtn = screen.getAllByRole("button", { name: "+" }).find(
+        (btn) => btn.classList.contains("subtask-add-btn"),
+      )
+      fireEvent.click(addBtn)
+
+      expect(screen.getByText("My subtask")).toBeInTheDocument()
+      expect(input.value).toBe("")
+    })
+
+    it("does not add an empty subtask", () => {
+      renderModal()
+
+      const input = screen.getByPlaceholderText("Add a subtask...")
+      fireEvent.change(input, { target: { value: "   " } })
+
+      const addBtn = screen.getAllByRole("button", { name: "+" }).find(
+        (btn) => btn.classList.contains("subtask-add-btn"),
+      )
+      // Button should be disabled
+      expect(addBtn).toBeDisabled()
+      fireEvent.click(addBtn)
+
+      // No subtask items should exist
+      const subtaskItems = screen.queryAllByText((_, el) =>
+        el.classList.contains("subtask-text"),
+      )
+      expect(subtaskItems).toHaveLength(0)
+    })
+
+    it("shows existing subtasks from todo data", () => {
+      const subtasks = [
+        {
+          id: "st1",
+          message: "First subtask",
+          completed: false,
+          completedAt: null,
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          id: "st2",
+          message: "Second subtask",
+          completed: true,
+          completedAt: "2026-03-26T12:00:00.000Z",
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-26T12:00:00.000Z",
+        },
+      ]
+
+      renderModal({ todo: makeTodo({ subtasks }) })
+
+      expect(screen.getByText("First subtask")).toBeInTheDocument()
+      expect(screen.getByText("Second subtask")).toBeInTheDocument()
+    })
+
+    it("can toggle a subtask completion", () => {
+      const subtasks = [
+        {
+          id: "st1",
+          message: "Toggle me",
+          completed: false,
+          completedAt: null,
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+      ]
+
+      renderModal({ todo: makeTodo({ subtasks }) })
+
+      // Find the checkbox for the subtask
+      const checkbox = screen.getByRole("checkbox", { checked: false })
+      fireEvent.click(checkbox)
+
+      // Checkbox should now be checked
+      expect(checkbox.checked).toBe(true)
+    })
+
+    it("can delete a subtask", () => {
+      const subtasks = [
+        {
+          id: "st1",
+          message: "Delete me",
+          completed: false,
+          completedAt: null,
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+      ]
+
+      renderModal({ todo: makeTodo({ subtasks }) })
+
+      expect(screen.getByText("Delete me")).toBeInTheDocument()
+
+      const deleteBtn = screen.getByTitle("Delete subtask")
+      fireEvent.click(deleteBtn)
+
+      expect(screen.queryByText("Delete me")).not.toBeInTheDocument()
+    })
+
+    it("can edit a subtask", () => {
+      const subtasks = [
+        {
+          id: "st1",
+          message: "Original subtask",
+          completed: false,
+          completedAt: null,
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+      ]
+
+      renderModal({ todo: makeTodo({ subtasks }) })
+
+      const editBtn = screen.getByTitle("Edit subtask")
+      fireEvent.click(editBtn)
+
+      const editInput = screen.getByDisplayValue("Original subtask")
+      fireEvent.change(editInput, { target: { value: "Edited subtask" } })
+
+      // Save the edit
+      const saveBtn = screen.getByRole("button", { name: "Save" })
+      fireEvent.click(saveBtn)
+
+      expect(screen.getByText("Edited subtask")).toBeInTheDocument()
+      expect(screen.queryByText("Original subtask")).not.toBeInTheDocument()
+    })
+
+    it("shows subtask progress bar when subtasks exist", () => {
+      const subtasks = [
+        {
+          id: "st1",
+          message: "Done",
+          completed: true,
+          completedAt: "2026-03-26T12:00:00.000Z",
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-26T12:00:00.000Z",
+        },
+        {
+          id: "st2",
+          message: "Not done",
+          completed: false,
+          completedAt: null,
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+      ]
+
+      renderModal({ todo: makeTodo({ subtasks }) })
+
+      // Should show progress text like "1/2 done"
+      expect(screen.getByText((content) => content.includes("1/2 done"))).toBeInTheDocument()
+    })
+
+    it("includes subtasks in saved data", () => {
+      const { props } = renderModal()
+
+      // Add a subtask
+      const input = screen.getByPlaceholderText("Add a subtask...")
+      fireEvent.change(input, { target: { value: "Saved subtask" } })
+      const addBtn = screen.getAllByRole("button", { name: "+" }).find(
+        (btn) => btn.classList.contains("subtask-add-btn"),
+      )
+      fireEvent.click(addBtn)
+
+      // Save
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+      const saved = props.onSave.mock.calls[0][0]
+      expect(saved.subtasks).toHaveLength(1)
+      expect(saved.subtasks[0].message).toBe("Saved subtask")
+      expect(saved.subtasks[0].completed).toBe(false)
+    })
+
+    it("completed subtasks stay with parent in saved data", () => {
+      const subtasks = [
+        {
+          id: "st1",
+          message: "Completed task",
+          completed: true,
+          completedAt: "2026-03-26T12:00:00.000Z",
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-26T12:00:00.000Z",
+        },
+        {
+          id: "st2",
+          message: "Active task",
+          completed: false,
+          completedAt: null,
+          createdAt: "2026-03-25T10:00:00.000Z",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+      ]
+
+      const { props } = renderModal({ todo: makeTodo({ subtasks }) })
+
+      // Save without changes
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+      const saved = props.onSave.mock.calls[0][0]
+      expect(saved.subtasks).toHaveLength(2)
+      expect(saved.subtasks.find((s) => s.id === "st1").completed).toBe(true)
+      expect(saved.subtasks.find((s) => s.id === "st2").completed).toBe(false)
+    })
   })
 })
