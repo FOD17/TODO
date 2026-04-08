@@ -2,7 +2,7 @@ const { Client } = require("pg")
 
 class DBManager {
   constructor(connectionString) {
-    this.connectionString = connectionString || process.env.DATABASE_URL || "postgresql://localhost:5432/todo_tracker"
+    this.connectionString = connectionString || process.env.DATABASE_URL || "postgresql://localhost:5432/postgres"
     this.client = null
   }
 

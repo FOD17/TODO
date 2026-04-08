@@ -109,7 +109,7 @@ A modern Electron + React desktop application for managing technical information
 
 The application uses **PostgreSQL** as the primary database, connecting via the `pg` Node.js client library:
 
-- **Default Connection:** `postgresql://localhost:5432/todo_tracker`
+- **Default Connection:** `postgresql://localhost:5432/postgres`
 - **Environment Variable:** Set `DATABASE_URL` to override the default
 - **SSL:** Enabled in production, disabled for local development
 - **Connection Pooling:** Built-in connection management via pg client
@@ -177,83 +177,80 @@ Every write to PostgreSQL is **also mirrored to localStorage** (write-through ca
 
 ### What to create
 
-The app creates the PostgreSQL database tables automatically when you launch the Electron desktop version. You do not need to create tables or run SQL setup scripts manually.
+No manual schema setup is required. The app creates all tables automatically on first launch.
 
-### How to start the app with PostgreSQL
+The app connects to the **`postgres`** database (the default database on a standard PostgreSQL install) on `localhost:5432`. No new database needs to be created.
+
+### Default database connection
+
+- **Default URL:** `postgresql://localhost:5432/postgres`
+- **Environment Variable:** Override with `DATABASE_URL` if needed (e.g. different user, port, or database name)
+- **SSL:** Disabled for local development, enabled in production
+
+### Verify PostgreSQL is running
+
+Open a terminal and run:
+
+```bash
+psql -d postgres -c "SELECT version();"
+```
+
+If it returns a version string, you're ready to go. If it fails with "connection refused", start PostgreSQL from your system preferences or however you normally start it.
+
+### How to start the app
 
 ```bash
 npm install
 npm run dev:electron
 ```
 
-This starts the Electron app and connects to PostgreSQL, creating all necessary tables on first run.
-
-### Default database connection
-
-- **Default URL:** `postgresql://localhost:5432/todo_tracker`
-- **Environment Variable:** Override with `DATABASE_URL`
-- **SSL:** Enabled in production, disabled for local development
-
-### Confirm PostgreSQL connection
-
-```bash
-# Test connection with psql
-psql "$DATABASE_URL" -c "SELECT version();"
-
-# Or with the default connection
-psql "postgresql://localhost:5432/todo_tracker" -c "SELECT version();"
-```
+On first launch the app connects to `postgresql://localhost:5432/postgres` and creates the `todos`, `tags`, `contacts`, and `config` tables automatically.
 
 ### Inspect the database with psql
 
 ```bash
-# Connect to database
-psql "$DATABASE_URL"
+# Connect
+psql -d postgres
 
 # Useful commands inside psql
-\dt                          -- list all tables
-\d todos                     -- show todos table schema
-SELECT COUNT(*) FROM todos;  -- count todos
+\dt                                                    -- list all tables
+\d todos                                               -- show todos table schema
+SELECT COUNT(*) FROM todos;                            -- count todos
 SELECT * FROM todos WHERE completed = false LIMIT 10;  -- active todos
 SELECT company, COUNT(*) FROM todos GROUP BY company;  -- per-company count
-\q                           -- quit
+\q                                                     -- quit
 ```
 
-### Resetting the PostgreSQL database
+You can also use **DBeaver** — connect to `localhost:5432`, database `postgres`, and browse the tables directly.
 
-If you need a clean start, drop and recreate the database:
+### Reset the app tables
 
-```bash
-# Drop and recreate database
-dropdb todo_tracker
-createdb todo_tracker
+If you need a clean slate, drop the app tables and restart the Electron app to recreate them:
 
-# Or with psql
-psql -c "DROP DATABASE IF EXISTS todo_tracker;"
-psql -c "CREATE DATABASE todo_tracker;"
+```sql
+DROP TABLE IF EXISTS todos, tags, contacts, config;
 ```
 
-Then restart the Electron app to recreate tables.
+Run this in psql or the DBeaver SQL editor, then relaunch the app.
 
-### Troubleshooting connection issues
+### Troubleshooting
 
 **Connection refused:**
 
-- Ensure PostgreSQL is running: `brew services list` (macOS) or `sudo systemctl status postgresql` (Linux)
-- Check if port 5432 is open: `netstat -an | grep 5432`
+Check that PostgreSQL is running on port 5432:
+
+```bash
+netstat -an | grep 5432
+```
 
 **Authentication failed:**
 
-- Verify username/password in DATABASE_URL
-- Check pg_hba.conf for authentication rules
+If your PostgreSQL install requires a username or password, set the full connection string:
 
-**Database doesn't exist:**
-
-- Create it: `createdb todo_tracker`
-
-**Permission denied:**
-
-- Grant permissions: `GRANT ALL PRIVILEGES ON DATABASE todo_tracker TO todo_user;`
+```bash
+export DATABASE_URL="postgresql://your_user:your_password@localhost:5432/postgres"
+npm run dev:electron
+```
 
 ---
 
@@ -321,89 +318,8 @@ When PostgreSQL recovers:
 
 - **Node.js** 18+
 - **npm** 7+
-- **PostgreSQL** 12+ (local installation or remote database)
-- macOS, Windows, or Linux
-
-### PostgreSQL Setup
-
-#### Option 1: Local PostgreSQL Installation
-
-**macOS (with Homebrew):**
-
-```bash
-# Install PostgreSQL
-brew install postgresql
-
-# Start PostgreSQL service
-brew services start postgresql
-
-# Create database
-createdb todo_tracker
-
-# Optional: Create a dedicated user
-createuser --createdb --login todo_user
-psql -c "ALTER USER todo_user PASSWORD 'your_password_here';"
-```
-
-**Windows (with Chocolatey):**
-
-```bash
-# Install PostgreSQL
-choco install postgresql
-
-# Create database
-createdb todo_tracker
-
-# Optional: Create a dedicated user
-createuser --createdb --login todo_user
-psql -c "ALTER USER todo_user PASSWORD 'your_password_here';"
-```
-
-**Linux (Ubuntu/Debian):**
-
-```bash
-# Install PostgreSQL
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-
-# Start service
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-
-# Create database
-sudo -u postgres createdb todo_tracker
-
-# Optional: Create a dedicated user
-sudo -u postgres createuser --createdb --login todo_user
-sudo -u postgres psql -c "ALTER USER todo_user PASSWORD 'your_password_here';"
-```
-
-#### Option 2: Docker PostgreSQL (Recommended for Development)
-
-```bash
-# Run PostgreSQL in Docker
-docker run --name todo-postgres \
-  -e POSTGRES_DB=todo_tracker \
-  -e POSTGRES_USER=todo_user \
-  -e POSTGRES_PASSWORD=mysecretpassword \
-  -p 5432:5432 \
-  -d postgres:15
-
-# Verify connection
-psql "postgresql://todo_user:mysecretpassword@localhost:5432/todo_tracker" -c "SELECT version();"
-```
-
-#### Option 3: Cloud PostgreSQL (Production)
-
-Use services like:
-
-- **Supabase** (free tier available)
-- **Neon** (serverless PostgreSQL)
-- **AWS RDS PostgreSQL**
-- **Google Cloud SQL**
-- **Azure Database for PostgreSQL**
-
-Set the `DATABASE_URL` environment variable to your cloud database connection string.
+- **PostgreSQL** 12+ (already installed)
+- macOS
 
 ### Installation
 
@@ -415,8 +331,8 @@ cd TODO-Tracker
 # 2. Install dependencies
 npm install
 
-# 3. Set database connection (optional - defaults to localhost)
-export DATABASE_URL="postgresql://todo_user:mysecretpassword@localhost:5432/todo_tracker"
+# 3. Set database connection (optional — defaults to postgresql://localhost:5432/postgres)
+export DATABASE_URL="postgresql://your_user:your_password@localhost:5432/postgres"
 
 # 4a. Run in browser (dev) mode — uses localStorage only
 npm run dev
@@ -425,7 +341,7 @@ npm run dev
 npm run dev:electron
 ```
 
-On first launch, the app creates all necessary tables in PostgreSQL automatically. No manual schema setup is required.
+On first launch the app creates all necessary tables automatically. No manual schema setup is required.
 
 ### Build for Production
 
