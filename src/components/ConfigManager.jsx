@@ -1,5 +1,6 @@
-import React, { useState } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { saveConfigLocalStorage } from "../utils/markdownHandler"
+import { electronAdapter } from "../utils/electronAdapter"
 import {
   addCompany,
   removeCompany,
@@ -44,8 +45,17 @@ function ConfigManager({
   onTagsChange = () => {},
   onManualExport = () => {},
   onSelectSyncFolder = () => {},
+  defaultTab = "theme",
 }) {
-  const [activeTab, setActiveTab] = useState("theme")
+  const [activeTab, setActiveTab] = useState(defaultTab)
+  // Jump to defaultTab each time the modal opens
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (showConfig && !wasOpen.current) {
+      setActiveTab(defaultTab)
+    }
+    wasOpen.current = showConfig
+  }, [showConfig, defaultTab])
   const [newCompanyName, setNewCompanyName] = useState("")
   const [newCompanyType, setNewCompanyType] = useState("company")
   const [newAEName, setNewAEName] = useState("")
@@ -56,6 +66,72 @@ function ConfigManager({
   const [newLabelDescription, setNewLabelDescription] = useState("")
   const [editingLabel, setEditingLabel] = useState(null)
   const [exportStatus, setExportStatus] = useState("")
+
+  // ── Required table SQL ─────────────────────────────────────────────────────
+  const TABLE_SQL = {
+    todos: `CREATE TABLE todos (
+  id TEXT PRIMARY KEY,
+  message TEXT NOT NULL,
+  date TEXT NOT NULL,
+  company TEXT,
+  names TEXT,
+  "accountRep" TEXT,
+  completed BOOLEAN DEFAULT FALSE,
+  description TEXT,
+  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`,
+    tags: `CREATE TABLE tags (
+  id TEXT PRIMARY KEY,
+  company TEXT NOT NULL,
+  "tagName" TEXT NOT NULL,
+  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(company, "tagName")
+);`,
+    contacts: `CREATE TABLE contacts (
+  id TEXT PRIMARY KEY,
+  company TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT,
+  email TEXT,
+  phone TEXT,
+  notes TEXT,
+  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`,
+    config: `CREATE TABLE config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`,
+  }
+
+  // ── Database connection state ───────────────────────────────────────────────
+  const [dbHost, setDbHost] = useState("localhost")
+  const [dbPort, setDbPort] = useState("5432")
+  const [dbName, setDbName] = useState("postgres")
+  const [dbUser, setDbUser] = useState("")
+  const [dbPassword, setDbPassword] = useState("")
+  const [dbShowPassword, setDbShowPassword] = useState(false)
+  const [dbTestStatus, setDbTestStatus] = useState(null)  // null | "testing" | { ok, error }
+  const [dbSaveStatus, setDbSaveStatus] = useState(null)  // null | "saving" | { ok, error }
+  const [dbInfoLoaded, setDbInfoLoaded] = useState(false)
+
+  // Load current connection info when the Database tab is first opened
+  useEffect(() => {
+    if (activeTab === "database" && !dbInfoLoaded) {
+      electronAdapter.getConnectionInfo().then((info) => {
+        if (info) {
+          setDbHost(info.host || "localhost")
+          setDbPort(String(info.port || 5432))
+          setDbName(info.database || "postgres")
+          setDbUser(info.user || "")
+          // Never pre-fill the password field — user must re-enter to change
+        }
+        setDbInfoLoaded(true)
+      })
+    }
+  }, [activeTab, dbInfoLoaded])
 
   const companies = getCompanies(tags)
   const companyTypes = tags.companyTypes || {}
@@ -163,6 +239,33 @@ function ConfigManager({
     setTimeout(() => setExportStatus(""), 3000)
   }
 
+  // ── Database connection ────────────────────────────────────────────────────
+
+  const dbParams = () => ({
+    host: dbHost.trim() || "localhost",
+    port: parseInt(dbPort) || 5432,
+    database: dbName.trim() || "postgres",
+    user: dbUser.trim(),
+    password: dbPassword,
+  })
+
+  const handleTestConnection = async () => {
+    setDbTestStatus("testing")
+    setDbSaveStatus(null)
+    const result = await electronAdapter.testConnection(dbParams())
+    setDbTestStatus(result)
+  }
+
+  const handleSaveConnection = async () => {
+    setDbSaveStatus("saving")
+    setDbTestStatus(null)
+    const result = await electronAdapter.setConnection(dbParams())
+    setDbSaveStatus(result)
+    if (result.ok) {
+      setDbPassword("") // clear password from memory after save
+    }
+  }
+
   const themes = {
     "modern-light": { name: "Modern Light", description: "Clean, bright interface" },
     "one-light": { name: "One Light", description: "Atom One Light" },
@@ -186,6 +289,7 @@ function ConfigManager({
     { id: "executives", label: "👤 Executives" },
     { id: "labels", label: "🏷 Tags" },
     { id: "export", label: "📤 Export & Sync" },
+    { id: "database", label: "🔌 Database" },
   ]
 
   if (!showConfig) return null
@@ -659,6 +763,190 @@ function ConfigManager({
               </section>
             </>
           )}
+          {/* ── DATABASE ── */}
+          {activeTab === "database" && (
+            <>
+              <section className="config-section">
+                <h3>Connection</h3>
+                <p className="label-help-text">
+                  Connects to a local PostgreSQL database. Changes take effect immediately —
+                  the app hot-swaps the connection without restarting.
+                </p>
+                <p style={{ fontSize: 11, color: typeof window !== "undefined" && window.electron ? "#2ecc71" : "#e74c3c", marginBottom: 8 }}>
+                  {typeof window !== "undefined" && window.electron ? "✓ Electron bridge detected" : "✗ Electron bridge NOT detected — open DevTools console and check for [preload] log"}
+                </p>
+
+                <div className="db-form">
+                  <div className="db-form-row">
+                    <div className="db-form-field db-field-grow">
+                      <label htmlFor="db-host">Host</label>
+                      <input
+                        id="db-host"
+                        type="text"
+                        className="tag-input"
+                        value={dbHost}
+                        onChange={(e) => setDbHost(e.target.value)}
+                        placeholder="localhost"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="db-form-field db-field-port">
+                      <label htmlFor="db-port">Port</label>
+                      <input
+                        id="db-port"
+                        type="number"
+                        className="tag-input"
+                        value={dbPort}
+                        onChange={(e) => setDbPort(e.target.value)}
+                        placeholder="5432"
+                        min="1"
+                        max="65535"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="db-form-field">
+                    <label htmlFor="db-name">Database</label>
+                    <input
+                      id="db-name"
+                      type="text"
+                      className="tag-input"
+                      value={dbName}
+                      onChange={(e) => setDbName(e.target.value)}
+                      placeholder="postgres"
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div className="db-form-field">
+                    <label htmlFor="db-user">Username</label>
+                    <input
+                      id="db-user"
+                      type="text"
+                      className="tag-input"
+                      value={dbUser}
+                      onChange={(e) => setDbUser(e.target.value)}
+                      placeholder="Leave blank to use system default"
+                      autoComplete="username"
+                    />
+                  </div>
+
+                  <div className="db-form-field">
+                    <label htmlFor="db-password">Password</label>
+                    <div className="db-password-row">
+                      <input
+                        id="db-password"
+                        type={dbShowPassword ? "text" : "password"}
+                        className="tag-input db-password-input"
+                        value={dbPassword}
+                        onChange={(e) => setDbPassword(e.target.value)}
+                        placeholder="Leave blank if no password required"
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        className="db-toggle-pw"
+                        onClick={() => setDbShowPassword((v) => !v)}
+                        aria-label={dbShowPassword ? "Hide password" : "Show password"}
+                        title={dbShowPassword ? "Hide password" : "Show password"}
+                      >
+                        {dbShowPassword ? "🙈" : "👁"}
+                      </button>
+                    </div>
+                    <span className="help-text" style={{ marginLeft: 0 }}>
+                      Saved encrypted via macOS Keychain — never stored as plain text.
+                    </span>
+                  </div>
+
+                  <div className="db-actions">
+                    <button
+                      type="button"
+                      className="tag-btn-cancel db-btn"
+                      onClick={handleTestConnection}
+                      disabled={dbTestStatus === "testing" || dbSaveStatus === "saving"}
+                      aria-label="Test database connection"
+                    >
+                      {dbTestStatus === "testing" ? "Testing…" : "Test Connection"}
+                    </button>
+                    <button
+                      type="button"
+                      className="tag-btn-add db-btn"
+                      onClick={handleSaveConnection}
+                      disabled={dbTestStatus === "testing" || dbSaveStatus === "saving"}
+                      aria-label="Save connection and reconnect"
+                    >
+                      {dbSaveStatus === "saving" ? "Connecting…" : "Save & Connect"}
+                    </button>
+                  </div>
+
+                  {dbTestStatus && dbTestStatus !== "testing" && (
+                    <div role="status" aria-live="polite">
+                      <div className={`db-status-msg ${dbTestStatus.ok ? "db-status-ok" : "db-status-err"}`}>
+                        {dbTestStatus.ok
+                          ? dbTestStatus.missingTables?.length === 0
+                            ? "Connection successful — all required tables present"
+                            : `Connection successful — ${dbTestStatus.missingTables.length} missing table${dbTestStatus.missingTables.length > 1 ? "s" : ""} (see below)`
+                          : `Connection failed: ${dbTestStatus.error}`}
+                      </div>
+
+                      {dbTestStatus.ok && dbTestStatus.missingTables?.length > 0 && (
+                        <div style={{ marginTop: 12 }}>
+                          <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: "var(--text-primary)" }}>
+                            Run the following SQL in your database to create the missing tables:
+                          </p>
+                          {dbTestStatus.missingTables.map((table) => (
+                            <div key={table} style={{ marginBottom: 10 }}>
+                              <p style={{ fontSize: 11, fontWeight: 600, marginBottom: 3, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                {table}
+                              </p>
+                              <pre style={{
+                                fontSize: 11,
+                                background: "var(--bg-secondary, #1e1e1e)",
+                                color: "var(--text-primary, #d4d4d4)",
+                                padding: "10px 12px",
+                                borderRadius: 6,
+                                overflowX: "auto",
+                                margin: 0,
+                                border: "1px solid var(--border-color, #333)",
+                                userSelect: "all",
+                              }}>
+                                {TABLE_SQL[table]}
+                              </pre>
+                            </div>
+                          ))}
+                          <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                            After running the SQL, click Save &amp; Connect — the app will create any missing tables automatically on first connect.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {dbSaveStatus && dbSaveStatus !== "saving" && (
+                    <div
+                      className={`db-status-msg ${dbSaveStatus.ok ? "db-status-ok" : "db-status-err"}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {dbSaveStatus.ok
+                        ? "Connected and saved — the app is now using this database"
+                        : `Failed to connect: ${dbSaveStatus.error}`}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="config-section">
+                <h3>Tips</h3>
+                <ul className="db-tips">
+                  <li>The default connection is <code>localhost:5432/postgres</code> with no username or password.</li>
+                  <li>To verify PostgreSQL is running, open Terminal and run: <code>psql -d postgres -c "SELECT version();"</code></li>
+                  <li>To inspect the app tables in DBeaver, connect to your database and look for <code>todos</code>, <code>tags</code>, <code>contacts</code>, and <code>config</code>.</li>
+                </ul>
+              </section>
+            </>
+          )}
         </div>
       </div>
 
@@ -1057,6 +1345,60 @@ function ConfigManager({
         .sync-interval-select:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
 
         .last-sync-text { font-size: 12px; color: var(--text-muted); margin: 0; }
+
+        /* Database tab */
+        .db-form { display: flex; flex-direction: column; gap: 14px; }
+        .db-form-row { display: flex; gap: 10px; }
+        .db-form-field { display: flex; flex-direction: column; gap: 5px; }
+        .db-form-field label { font-size: 13px; font-weight: 600; color: var(--text); }
+        .db-field-grow { flex: 1; }
+        .db-field-port { width: 100px; flex-shrink: 0; }
+
+        .db-password-row { display: flex; gap: 6px; align-items: center; }
+        .db-password-input { flex: 1; }
+        .db-toggle-pw {
+          background: var(--background);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 6px 10px;
+          cursor: pointer;
+          font-size: 14px;
+          flex-shrink: 0;
+          transition: border-color 0.15s;
+        }
+        .db-toggle-pw:hover { border-color: var(--primary); }
+        .db-toggle-pw:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        .db-actions { display: flex; gap: 10px; margin-top: 4px; }
+        .db-btn { flex: 1; }
+
+        .db-status-msg {
+          font-size: 13px;
+          font-weight: 500;
+          padding: 8px 12px;
+          border-radius: 6px;
+          margin-top: 2px;
+        }
+        .db-status-ok { background: rgba(46,204,113,0.12); color: #27ae60; }
+        .db-status-err { background: rgba(231,76,60,0.1); color: #c0392b; }
+
+        .db-tips {
+          font-size: 13px;
+          color: var(--text-muted);
+          margin: 0;
+          padding-left: 18px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          line-height: 1.5;
+        }
+        .db-tips code {
+          background: var(--background);
+          padding: 1px 5px;
+          border-radius: 3px;
+          font-size: 12px;
+          color: var(--primary);
+        }
 
         @media (max-width: 600px) {
           .config-modal { width: 98%; max-height: 96vh; }

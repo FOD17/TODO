@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron")
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+console.log("[preload] running")
+
 contextBridge.exposeInMainWorld("electron", {
   // Todos
   getTodos: () => ipcRenderer.invoke("db:getTodos"),
@@ -15,16 +15,13 @@ contextBridge.exposeInMainWorld("electron", {
   // Tags
   getTags: () => ipcRenderer.invoke("db:getTags"),
   saveTags: (tags) => ipcRenderer.invoke("db:saveTags", tags),
-  addTag: (company, tagName) =>
-    ipcRenderer.invoke("db:addTag", company, tagName),
-  removeTag: (company, tagName) =>
-    ipcRenderer.invoke("db:removeTag", company, tagName),
+  addTag: (company, tagName) => ipcRenderer.invoke("db:addTag", company, tagName),
+  removeTag: (company, tagName) => ipcRenderer.invoke("db:removeTag", company, tagName),
 
   // Contacts
   getContacts: () => ipcRenderer.invoke("db:getContacts"),
   saveContacts: (contacts) => ipcRenderer.invoke("db:saveContacts", contacts),
-  addContact: (company, contact) =>
-    ipcRenderer.invoke("db:addContact", company, contact),
+  addContact: (company, contact) => ipcRenderer.invoke("db:addContact", company, contact),
   updateContact: (company, contactId, updates) =>
     ipcRenderer.invoke("db:updateContact", company, contactId, updates),
   deleteContact: (company, contactId) =>
@@ -34,14 +31,18 @@ contextBridge.exposeInMainWorld("electron", {
   getConfig: () => ipcRenderer.invoke("db:getConfig"),
   updateConfig: (config) => ipcRenderer.invoke("db:updateConfig", config),
 
-  // Backup/Restore
+  // Backup / Restore
   exportBackup: () => ipcRenderer.invoke("db:exportBackup"),
-  importBackup: (backupData) =>
-    ipcRenderer.invoke("db:importBackup", backupData),
+  importBackup: (backupData) => ipcRenderer.invoke("db:importBackup", backupData),
 
   // Status
   getStatus: () => ipcRenderer.invoke("db:getStatus"),
 
-  // Health check (lightweight ping for SyncManager)
+  // Health check (used by SyncManager polling)
   ping: () => ipcRenderer.invoke("db:ping"),
+
+  // Connection management
+  getConnectionInfo: () => ipcRenderer.invoke("db:getConnectionInfo"),
+  testConnection: (params) => ipcRenderer.invoke("db:testConnection", params),
+  setConnection: (params) => ipcRenderer.invoke("db:setConnection", params),
 })

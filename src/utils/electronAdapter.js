@@ -652,6 +652,55 @@ class ElectronAdapter {
     return data
   }
 
+  // ─── CONNECTION ────────────────────────────────────────────────────────────
+
+  /**
+   * Returns the current connection info (host, port, database, user, hasPassword).
+   * Password is never returned — it stays in the main process.
+   */
+  async getConnectionInfo() {
+    if (!this.hasElectron) return null
+    try {
+      return await window.electron.getConnectionInfo()
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Tests a set of connection params without saving or disrupting the live connection.
+   * @param {{ host, port, database, user, password }} params
+   * @returns {{ ok: boolean, error?: string }}
+   */
+  async testConnection(params) {
+    if (!this.hasElectron) return { ok: false, error: "Not running in Electron" }
+    try {
+      return await window.electron.testConnection(params)
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  }
+
+  /**
+   * Saves a new connection (encrypted on disk) and hot-swaps the database.
+   * Only replaces the active connection if it succeeds.
+   * @param {{ host, port, database, user, password }} params
+   * @returns {{ ok: boolean, error?: string }}
+   */
+  async setConnection(params) {
+    if (!this.hasElectron) return { ok: false, error: "Not running in Electron" }
+    try {
+      const result = await window.electron.setConnection(params)
+      if (result.ok) {
+        this._ready = true
+        syncManager.setAvailable(true)
+      }
+      return result
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  }
+
   // ─── STATUS ────────────────────────────────────────────────────────────────
 
   async getStatus() {

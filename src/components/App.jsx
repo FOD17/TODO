@@ -20,6 +20,7 @@ import CompanyTabs from "./CompanyTabs"
 import EditTodoDrawer from "./EditTodoDrawer"
 import ConfigManager from "./ConfigManager"
 import TodoDetailModal from "./TodoDetailModal"
+import DBStatusIndicator from "./DBStatusIndicator"
 
 // Initialize tags with new format if needed
 const initializeTags = () => {
@@ -41,6 +42,7 @@ function App() {
   const [config, setConfig] = useState(loadConfigLocalStorageSync())
   const [selectedCompany, setSelectedCompany] = useState("All")
   const [showConfig, setShowConfig] = useState(false)
+  const [configDefaultTab, setConfigDefaultTab] = useState("theme")
   const [showCompleted, setShowCompleted] = useState(false)
   const [selectedTodo, setSelectedTodo] = useState(null)
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
@@ -203,6 +205,11 @@ function App() {
 
   const handleConfigChange = useCallback((newConfig) => {
     setConfig(newConfig)
+  }, [])
+
+  const handleOpenSettings = useCallback((tab = "theme") => {
+    setConfigDefaultTab(tab)
+    setShowConfig(true)
   }, [])
 
   const handleTagsChange = useCallback(
@@ -465,13 +472,17 @@ function App() {
           onTagsChange={handleTagsChange}
           onManualExport={handleManualExport}
           onSelectSyncFolder={handleSelectSyncFolder}
+          defaultTab={configDefaultTab}
         />
+
+        {/* DB connection status dot — above the settings button */}
+        <DBStatusIndicator onOpenSettings={() => handleOpenSettings("database")} />
 
         {/* Floating Settings Button */}
         {!showConfig && (
           <button
             className="settings-button-corner"
-            onClick={() => setShowConfig(true)}
+            onClick={() => handleOpenSettings("theme")}
             title="Settings"
           >
             ⚙️
