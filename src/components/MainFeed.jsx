@@ -17,15 +17,14 @@ function MainFeed({
   accountExecutives = [],
   companyAssignments = {},
 }) {
-  const filteredActive =
-    selectedCompany === "All"
-      ? todos.active
-      : todos.active.filter((t) => t.company === selectedCompany)
+  const filterByCompany = (list) => {
+    if (selectedCompany === "All") return list
+    if (selectedCompany === "Personal") return list.filter((t) => !t.company || t.company === "Personal")
+    return list.filter((t) => t.company === selectedCompany)
+  }
 
-  const filteredCompleted =
-    selectedCompany === "All"
-      ? todos.completed
-      : todos.completed.filter((t) => t.company === selectedCompany)
+  const filteredActive = filterByCompany(todos.active)
+  const filteredCompleted = filterByCompany(todos.completed)
 
   const activeCount = filteredActive.length
   const completedCount = filteredCompleted.length

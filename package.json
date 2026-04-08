@@ -4,7 +4,7 @@
   "description": "React-based TODO list app for managing technical information across multiple companies",
   "private": true,
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "homepage": "./",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "lint": "eslint src --ext .js,.jsx,.ts,.tsx"
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "test:mutation": "stryker run",
+    "test:mutation:sync": "stryker run --mutate src/utils/syncManager.js"
   },
   "dependencies": {
     "lucide-react": "^0.294.0",
@@ -23,16 +25,18 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
     "@vitejs/plugin-react": "^4.2.0",
     "@vitest/ui": "^1.0.4",
-    "better-sqlite3": "^12.8.0",
     "concurrently": "^8.2.2",
     "electron": "^41.1.0",
     "electron-builder": "^26.8.1",
     "electron-is-dev": "^3.0.1",
     "jsdom": "^23.0.1",
+    "pg": "^8.11.3",
     "vite": "^5.0.8",
     "vitest": "^1.0.4",
     "wait-on": "^7.2.0"
@@ -42,7 +46,7 @@
     "productName": "TODO Tracker",
     "files": [
       "dist/**/*",
-      "electron/**/*",
+      "electron/**/*.cjs",
       "package.json"
     ],
     "directories": {

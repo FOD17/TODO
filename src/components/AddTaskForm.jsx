@@ -108,15 +108,21 @@ function AddTaskForm({
       {!isExpanded ? (
         <div
           className="add-task-collapsed"
+          role="button"
+          tabIndex={0}
+          aria-label="Add a new task"
           onClick={() => setIsExpanded(true)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(true) } }}
         >
-          <span className="add-task-plus">+</span>
+          <span className="add-task-plus" aria-hidden="true">+</span>
           <span className="add-task-placeholder">Add a new task...</span>
         </div>
       ) : (
         <form className="add-task-expanded" onSubmit={handleSubmit}>
           {/* Task name */}
+          <label htmlFor="atf-message" className="sr-only">Task name</label>
           <input
+            id="atf-message"
             type="text"
             className="atf-input atf-message"
             value={message}
@@ -128,8 +134,9 @@ function AddTaskForm({
           {/* Row: Date + Company + AE */}
           <div className="atf-row">
             <div className="atf-field">
-              <label className="atf-label">Date</label>
+              <label htmlFor="atf-date" className="atf-label">Date</label>
               <input
+                id="atf-date"
                 type="date"
                 className="atf-input atf-date"
                 value={date}
@@ -137,8 +144,9 @@ function AddTaskForm({
               />
             </div>
             <div className="atf-field">
-              <label className="atf-label">Company</label>
+              <label htmlFor="atf-company" className="atf-label">Company</label>
               <Autocomplete
+                inputId="atf-company"
                 value={company}
                 onChange={handleCompanyChange}
                 suggestions={companies}
@@ -146,8 +154,9 @@ function AddTaskForm({
               />
             </div>
             <div className="atf-field">
-              <label className="atf-label">Account Executive</label>
+              <label htmlFor="atf-ae" className="atf-label">Account Executive</label>
               <Autocomplete
+                inputId="atf-ae"
                 value={accountRep}
                 onChange={(val) => setAccountRep(val)}
                 suggestions={accountExecutives.map((ae) => ae.name)}
@@ -158,7 +167,7 @@ function AddTaskForm({
 
           {/* Labels */}
           <div className="atf-field">
-            <label className="atf-label">Labels</label>
+            <label htmlFor="atf-label-search" className="atf-label">Labels</label>
             <div className="atf-labels-area">
               {selectedLabels.map((labelName) => {
                 const def = getLabelDef(labelName)
@@ -176,26 +185,35 @@ function AddTaskForm({
                     <button
                       type="button"
                       className="atf-label-remove"
+                      aria-label={`Remove label ${labelName}`}
                       onClick={() => handleToggleLabel(labelName)}
                     >
-                      ✕
+                      <span aria-hidden="true">✕</span>
                     </button>
                   </span>
                 )
               })}
               <div className="atf-label-search-wrapper">
                 <input
+                  id="atf-label-search"
                   type="text"
+                  role="combobox"
+                  aria-expanded={labelSearch.length > 0 && filteredLabels.length > 0}
+                  aria-autocomplete="list"
+                  aria-controls="atf-label-listbox"
+                  aria-label="Search and add labels"
                   className="atf-label-search"
                   value={labelSearch}
                   onChange={(e) => setLabelSearch(e.target.value)}
                   placeholder={selectedLabels.length > 0 ? "Add more..." : "Search labels..."}
                 />
                 {labelSearch && filteredLabels.length > 0 && (
-                  <div className="atf-label-dropdown">
+                  <div id="atf-label-listbox" className="atf-label-dropdown" role="listbox" aria-label="Label suggestions">
                     {filteredLabels.map((label) => (
                       <div
                         key={label.id}
+                        role="option"
+                        aria-selected={false}
                         className="atf-label-option"
                         onMouseDown={(e) => {
                           e.preventDefault()
@@ -242,8 +260,9 @@ function AddTaskForm({
 
           {/* Description */}
           <div className="atf-field">
-            <label className="atf-label">Description (optional)</label>
+            <label htmlFor="atf-description" className="atf-label">Description (optional)</label>
             <textarea
+              id="atf-description"
               className="atf-input atf-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -269,6 +288,23 @@ function AddTaskForm({
       )}
 
       <style>{`
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+
+        .add-task-collapsed:focus-visible {
+          outline: 2px solid var(--primary);
+          outline-offset: 2px;
+        }
+
         .add-task-form {
           margin-bottom: 24px;
         }

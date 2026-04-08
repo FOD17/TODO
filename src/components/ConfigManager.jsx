@@ -15,6 +15,26 @@ import {
   groupLabelsByTag,
 } from "../utils/tagManager"
 
+const SYNC_INTERVALS = [
+  { label: "Every 30 minutes", value: 30 },
+  { label: "Every hour", value: 60 },
+  { label: "Every 3 hours", value: 180 },
+  { label: "Every 6 hours", value: 360 },
+  { label: "Every 12 hours", value: 720 },
+  { label: "Every 24 hours", value: 1440 },
+]
+
+const EXPORT_FORMATS = [
+  { value: "json", label: "App JSON", desc: "Full fidelity — reimportable" },
+  { value: "csv", label: "CSV", desc: "Tasks only — Google Sheets / Excel" },
+  { value: "markdown", label: "Markdown", desc: "Human-readable — Google Docs" },
+]
+
+const PRESET_COLORS = [
+  "#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c",
+  "#3498db", "#9b59b6", "#e91e63", "#607d8b", "#795548",
+]
+
 function ConfigManager({
   config,
   onConfigChange,
@@ -22,19 +42,25 @@ function ConfigManager({
   setShowConfig,
   tags = {},
   onTagsChange = () => {},
+  onManualExport = () => {},
+  onSelectSyncFolder = () => {},
 }) {
   const [activeTab, setActiveTab] = useState("theme")
   const [newCompanyName, setNewCompanyName] = useState("")
+  const [newCompanyType, setNewCompanyType] = useState("company")
   const [newAEName, setNewAEName] = useState("")
   const [newAEEmail, setNewAEEmail] = useState("")
   const [editingAE, setEditingAE] = useState(null)
   const [newLabelName, setNewLabelName] = useState("")
   const [newLabelColor, setNewLabelColor] = useState("#3498db")
+  const [newLabelDescription, setNewLabelDescription] = useState("")
   const [editingLabel, setEditingLabel] = useState(null)
+  const [exportStatus, setExportStatus] = useState("")
 
   const companies = getCompanies(tags)
+  const companyTypes = tags.companyTypes || {}
   const accountExecutives = getAccountExecutives(tags)
-  const allLabels = getLabels(tags)
+  const allLabels = getLabels(tags) // already sorted alphabetically
   const grouped = groupLabelsByTag(allLabels)
 
   const handleThemeChange = (theme) => {
@@ -49,53 +75,41 @@ function ConfigManager({
     onConfigChange(newConfig)
   }
 
+  // ── Companies ──────────────────────────────────────────────────────────────
+
   const handleAddCompany = (e) => {
     e.preventDefault()
-    if (newCompanyName.trim()) {
-      const updatedTags = addCompany(tags, newCompanyName.trim())
-      onTagsChange(updatedTags)
-      setNewCompanyName("")
-    }
+    if (!newCompanyName.trim()) return
+    onTagsChange(addCompany(tags, newCompanyName.trim(), newCompanyType))
+    setNewCompanyName("")
+    setNewCompanyType("company")
   }
 
   const handleRemoveCompany = (company) => {
-    const updatedTags = removeCompany(tags, company)
-    onTagsChange(updatedTags)
+    onTagsChange(removeCompany(tags, company))
   }
+
+  // ── Account Executives ─────────────────────────────────────────────────────
 
   const handleAddAccountExecutive = (e) => {
     e.preventDefault()
-    if (newAEName.trim()) {
-      const updatedTags = addAccountExecutive(
-        tags,
-        newAEName.trim(),
-        newAEEmail.trim(),
-      )
-      onTagsChange(updatedTags)
-      setNewAEName("")
-      setNewAEEmail("")
-    }
+    if (!newAEName.trim()) return
+    onTagsChange(addAccountExecutive(tags, newAEName.trim(), newAEEmail.trim()))
+    setNewAEName("")
+    setNewAEEmail("")
   }
 
   const handleUpdateAccountExecutive = (e) => {
     e.preventDefault()
-    if (editingAE && newAEName.trim()) {
-      const updatedTags = updateAccountExecutive(
-        tags,
-        editingAE.id,
-        newAEName.trim(),
-        newAEEmail.trim(),
-      )
-      onTagsChange(updatedTags)
-      setNewAEName("")
-      setNewAEEmail("")
-      setEditingAE(null)
-    }
+    if (!editingAE || !newAEName.trim()) return
+    onTagsChange(updateAccountExecutive(tags, editingAE.id, newAEName.trim(), newAEEmail.trim()))
+    setNewAEName("")
+    setNewAEEmail("")
+    setEditingAE(null)
   }
 
   const handleRemoveAccountExecutive = (id) => {
-    const updatedTags = removeAccountExecutive(tags, id)
-    onTagsChange(updatedTags)
+    onTagsChange(removeAccountExecutive(tags, id))
   }
 
   const startEditingAE = (ae) => {
@@ -104,61 +118,57 @@ function ConfigManager({
     setNewAEEmail(ae.email || "")
   }
 
+  // ── Labels ─────────────────────────────────────────────────────────────────
+
   const handleAddLabel = (e) => {
     e.preventDefault()
-    if (newLabelName.trim()) {
-      const updatedTags = addLabel(tags, newLabelName.trim(), newLabelColor)
-      onTagsChange(updatedTags)
-      setNewLabelName("")
-      setNewLabelColor("#3498db")
-    }
+    if (!newLabelName.trim()) return
+    onTagsChange(addLabel(tags, newLabelName.trim(), newLabelColor, newLabelDescription.trim()))
+    setNewLabelName("")
+    setNewLabelColor("#3498db")
+    setNewLabelDescription("")
   }
 
   const handleUpdateLabel = (e) => {
     e.preventDefault()
-    if (editingLabel && newLabelName.trim()) {
-      const updatedTags = updateLabel(
-        tags,
-        editingLabel.id,
-        newLabelName.trim(),
-        newLabelColor,
-      )
-      onTagsChange(updatedTags)
-      setNewLabelName("")
-      setNewLabelColor("#3498db")
-      setEditingLabel(null)
-    }
+    if (!editingLabel || !newLabelName.trim()) return
+    onTagsChange(updateLabel(tags, editingLabel.id, newLabelName.trim(), newLabelColor, newLabelDescription.trim()))
+    setNewLabelName("")
+    setNewLabelColor("#3498db")
+    setNewLabelDescription("")
+    setEditingLabel(null)
   }
 
   const handleRemoveLabel = (id) => {
-    const updatedTags = removeLabel(tags, id)
-    onTagsChange(updatedTags)
+    onTagsChange(removeLabel(tags, id))
   }
 
   const startEditingLabel = (label) => {
     setEditingLabel(label)
     setNewLabelName(label.name)
     setNewLabelColor(label.color)
+    setNewLabelDescription(label.description || "")
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+
+  const handleManualExport = (format) => {
+    setExportStatus("Exporting…")
+    try {
+      onManualExport(format)
+      setExportStatus(`Exported as ${format.toUpperCase()}`)
+    } catch {
+      setExportStatus("Export failed")
+    }
+    setTimeout(() => setExportStatus(""), 3000)
   }
 
   const themes = {
-    "modern-light": {
-      name: "Modern Light",
-      description: "Clean, bright interface",
-    },
+    "modern-light": { name: "Modern Light", description: "Clean, bright interface" },
     "one-light": { name: "One Light", description: "Atom One Light" },
-    "github-light": {
-      name: "GitHub Light",
-      description: "GitHub's clean light theme",
-    },
-    "solarized-light": {
-      name: "Solarized Light",
-      description: "Precision colors",
-    },
-    "modern-dark": {
-      name: "Modern Dark",
-      description: "Dark mode with contrast",
-    },
+    "github-light": { name: "GitHub Light", description: "GitHub's clean light theme" },
+    "solarized-light": { name: "Solarized Light", description: "Precision colors" },
+    "modern-dark": { name: "Modern Dark", description: "Dark mode with contrast" },
     "one-dark": { name: "One Dark", description: "Atom One Dark" },
     dracula: { name: "Dracula", description: "Dark theme" },
     nord: { name: "Nord", description: "Arctic palette" },
@@ -170,377 +180,504 @@ function ConfigManager({
     sunset: { name: "Sunset", description: "Warm sunset colors" },
   }
 
+  const tabs = [
+    { id: "theme", label: "🎨 Theme" },
+    { id: "companies", label: "🏢 Companies" },
+    { id: "executives", label: "👤 Executives" },
+    { id: "labels", label: "🏷 Tags" },
+    { id: "export", label: "📤 Export & Sync" },
+  ]
+
+  if (!showConfig) return null
+
   return (
     <>
-      {showConfig && (
-        <div className="config-modal-overlay">
-          <div className="config-modal">
-            <div className="config-header">
-              <h2>⚙️ Settings</h2>
-              <button
-                onClick={() => setShowConfig(false)}
-                className="btn-close"
-              >
-                ✕
-              </button>
-            </div>
+      <div
+        className="config-modal-overlay"
+        onClick={() => setShowConfig(false)}
+        aria-label="Close settings"
+        role="button"
+        tabIndex={-1}
+        onKeyDown={(e) => e.key === "Escape" && setShowConfig(false)}
+      />
+      <div
+        className="config-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+      >
+        <div className="config-header">
+          <h2 id="config-dialog-title">⚙️ Settings</h2>
+          <button
+            onClick={() => setShowConfig(false)}
+            className="btn-close"
+            aria-label="Close settings"
+          >
+            ✕
+          </button>
+        </div>
 
-            <div className="config-tabs">
-              <button
-                className={`tab-btn ${activeTab === "theme" ? "active" : ""}`}
-                onClick={() => setActiveTab("theme")}
-              >
-                🎨 Theme
-              </button>
-              <button
-                className={`tab-btn ${activeTab === "companies" ? "active" : ""}`}
-                onClick={() => setActiveTab("companies")}
-              >
-                🏢 Companies
-              </button>
-              <button
-                className={`tab-btn ${activeTab === "executives" ? "active" : ""}`}
-                onClick={() => setActiveTab("executives")}
-              >
-                👤 Account Executives
-              </button>
-              <button
-                className={`tab-btn ${activeTab === "labels" ? "active" : ""}`}
-                onClick={() => setActiveTab("labels")}
-              >
-                🏷 Tags
-              </button>
-            </div>
+        <div className="config-tabs" role="tablist" aria-label="Settings sections">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-            <div className="config-content">
-              {activeTab === "theme" && (
-                <>
-                  <section className="config-section">
-                    <h3>Color Theme</h3>
-                    <div className="themes-grid">
-                      {Object.entries(themes).map(([key, theme]) => (
+        <div className="config-content">
+
+          {/* ── THEME ── */}
+          {activeTab === "theme" && (
+            <>
+              <section className="config-section">
+                <h3>Color Theme</h3>
+                <div className="themes-grid">
+                  {Object.entries(themes).map(([key, theme]) => (
+                    <button
+                      key={key}
+                      className={`theme-card ${config.theme === key ? "active" : ""}`}
+                      onClick={() => handleThemeChange(key)}
+                      aria-pressed={config.theme === key}
+                    >
+                      <div className="theme-name">{theme.name}</div>
+                      <div className="theme-desc">{theme.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="config-section">
+                <h3>Layout Options</h3>
+                <div className="config-option">
+                  <label htmlFor="compact-mode-toggle">
+                    <input
+                      id="compact-mode-toggle"
+                      type="checkbox"
+                      checked={config.compactMode || false}
+                      onChange={(e) => handleConfigChange("compactMode", e.target.checked)}
+                    />
+                    Compact Mode
+                  </label>
+                  <span className="help-text">Reduce spacing and font sizes</span>
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* ── COMPANIES ── */}
+          {activeTab === "companies" && (
+            <>
+              <section className="config-section">
+                <h3>Add New Entry</h3>
+                <form onSubmit={handleAddCompany} className="tag-form">
+                  <input
+                    type="text"
+                    placeholder="Name (e.g., Acme Corp)"
+                    value={newCompanyName}
+                    onChange={(e) => setNewCompanyName(e.target.value)}
+                    className="tag-input"
+                    aria-label="Company or vendor name"
+                  />
+                  <fieldset className="type-fieldset">
+                    <legend className="sr-only">Type</legend>
+                    <label className="type-radio">
+                      <input
+                        type="radio"
+                        name="company-type"
+                        value="company"
+                        checked={newCompanyType === "company"}
+                        onChange={() => setNewCompanyType("company")}
+                      />
+                      <span className="type-chip company-chip">🏢 Company</span>
+                    </label>
+                    <label className="type-radio">
+                      <input
+                        type="radio"
+                        name="company-type"
+                        value="vendor"
+                        checked={newCompanyType === "vendor"}
+                        onChange={() => setNewCompanyType("vendor")}
+                      />
+                      <span className="type-chip vendor-chip">🔧 Vendor</span>
+                    </label>
+                  </fieldset>
+                  <button type="submit" className="tag-btn-add">
+                    ➕ Add
+                  </button>
+                </form>
+              </section>
+
+              <section className="config-section">
+                <h3>Companies &amp; Vendors ({companies.length})</h3>
+                {companies.length > 0 ? (
+                  <div className="tag-list">
+                    {companies.map((company) => {
+                      const type = companyTypes[company] || "company"
+                      return (
+                        <div key={company} className="tag-item">
+                          <div className="tag-item-content">
+                            <span className={`type-dot ${type === "vendor" ? "vendor-dot" : "company-dot"}`} aria-label={type} />
+                            <span className="tag-icon">{type === "vendor" ? "🔧" : "🏢"}</span>
+                            <div>
+                              <span className="tag-name">{company}</span>
+                              <span className={`type-badge-small ${type}`}>{type}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveCompany(company)}
+                            className="tag-btn-delete"
+                            aria-label={`Remove ${company}`}
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="empty-message">No companies or vendors added yet.</p>
+                )}
+              </section>
+            </>
+          )}
+
+          {/* ── EXECUTIVES ── */}
+          {activeTab === "executives" && (
+            <>
+              <section className="config-section">
+                <h3>{editingAE ? "Edit" : "Add New"} Account Executive</h3>
+                <form
+                  onSubmit={editingAE ? handleUpdateAccountExecutive : handleAddAccountExecutive}
+                  className="tag-form"
+                >
+                  <input
+                    type="text"
+                    placeholder="Name (e.g., John Smith)"
+                    value={newAEName}
+                    onChange={(e) => setNewAEName(e.target.value)}
+                    className="tag-input"
+                    aria-label="Account executive name"
+                    required
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email (optional)"
+                    value={newAEEmail}
+                    onChange={(e) => setNewAEEmail(e.target.value)}
+                    className="tag-input"
+                    aria-label="Account executive email"
+                  />
+                  <div className="form-buttons">
+                    <button type="submit" className="tag-btn-add">
+                      {editingAE ? "💾 Update" : "➕ Add"} Executive
+                    </button>
+                    {editingAE && (
+                      <button
+                        type="button"
+                        onClick={() => { setEditingAE(null); setNewAEName(""); setNewAEEmail("") }}
+                        className="tag-btn-cancel"
+                      >
+                        ✕ Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </section>
+
+              <section className="config-section">
+                <h3>Account Executives ({accountExecutives.length})</h3>
+                {accountExecutives.length > 0 ? (
+                  <div className="tag-list">
+                    {accountExecutives.map((ae) => (
+                      <div key={ae.id} className="tag-item">
+                        <div className="tag-item-content">
+                          <span className="tag-icon" aria-hidden="true">👤</span>
+                          <div className="ae-info">
+                            <span className="ae-name">{ae.name}</span>
+                            {ae.email && <span className="ae-email">{ae.email}</span>}
+                          </div>
+                        </div>
+                        <div className="tag-actions">
+                          <button onClick={() => startEditingAE(ae)} className="tag-btn-edit" aria-label={`Edit ${ae.name}`}>✎</button>
+                          <button onClick={() => handleRemoveAccountExecutive(ae.id)} className="tag-btn-delete" aria-label={`Delete ${ae.name}`}>🗑</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-message">No account executives added yet.</p>
+                )}
+              </section>
+            </>
+          )}
+
+          {/* ── LABELS ── */}
+          {activeTab === "labels" && (
+            <>
+              <section className="config-section">
+                <h3>{editingLabel ? "Edit" : "Create New"} Tag</h3>
+                <p className="label-help-text">
+                  Use <code>tag:subtag</code> format for scoped labels (e.g., <code>status:pending</code>). Tags are sorted alphabetically.
+                </p>
+                <form onSubmit={editingLabel ? handleUpdateLabel : handleAddLabel} className="tag-form">
+                  <input
+                    type="text"
+                    placeholder="Tag name (e.g., important)"
+                    value={newLabelName}
+                    onChange={(e) => setNewLabelName(e.target.value)}
+                    className="tag-input"
+                    aria-label="Tag name"
+                    required
+                  />
+                  <textarea
+                    placeholder="Description — shown as a tooltip when clicking this tag (optional)"
+                    value={newLabelDescription}
+                    onChange={(e) => setNewLabelDescription(e.target.value)}
+                    className="tag-input tag-description-input"
+                    rows={2}
+                    aria-label="Tag description"
+                  />
+                  <div className="label-color-row">
+                    <span className="label-color-label" id="color-label">Color:</span>
+                    <div className="label-color-options" role="group" aria-labelledby="color-label">
+                      {PRESET_COLORS.map((color) => (
                         <button
-                          key={key}
-                          className={`theme-card ${config.theme === key ? "active" : ""}`}
-                          onClick={() => handleThemeChange(key)}
-                        >
-                          <div className="theme-name">{theme.name}</div>
-                          <div className="theme-desc">{theme.description}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="config-section">
-                    <h3>Layout Options</h3>
-                    <div className="config-option">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={config.compactMode || false}
-                          onChange={(e) =>
-                            handleConfigChange("compactMode", e.target.checked)
-                          }
+                          key={color}
+                          type="button"
+                          className={`label-color-swatch ${newLabelColor === color ? "active" : ""}`}
+                          style={{ background: color }}
+                          onClick={() => setNewLabelColor(color)}
+                          aria-label={color}
+                          aria-pressed={newLabelColor === color}
                         />
-                        Compact Mode
-                      </label>
-                      <span className="help-text">
-                        Reduce spacing and font sizes
+                      ))}
+                      <input
+                        type="color"
+                        value={newLabelColor}
+                        onChange={(e) => setNewLabelColor(e.target.value)}
+                        className="label-color-custom"
+                        aria-label="Custom color"
+                      />
+                    </div>
+                  </div>
+
+                  {newLabelName.trim() && (
+                    <div className="label-preview" aria-live="polite">
+                      <span className="label-preview-text">Preview:</span>
+                      <span
+                        className="label-preview-pill"
+                        style={{
+                          background: `${newLabelColor}22`,
+                          color: newLabelColor,
+                          border: `1px solid ${newLabelColor}44`,
+                        }}
+                      >
+                        {newLabelName.trim()}
                       </span>
                     </div>
-                  </section>
-                </>
-              )}
+                  )}
 
-              {activeTab === "companies" && (
-                <>
-                  <section className="config-section">
-                    <h3>Add New Company</h3>
-                    <form onSubmit={handleAddCompany} className="tag-form">
-                      <input
-                        type="text"
-                        placeholder="Company name (e.g., Acme Corp)"
-                        value={newCompanyName}
-                        onChange={(e) => setNewCompanyName(e.target.value)}
-                        className="tag-input"
-                      />
-                      <button type="submit" className="tag-btn-add">
-                        ➕ Add Company
+                  <div className="form-buttons">
+                    <button type="submit" className="tag-btn-add">
+                      {editingLabel ? "💾 Update" : "➕ Add"} Tag
+                    </button>
+                    {editingLabel && (
+                      <button
+                        type="button"
+                        onClick={() => { setEditingLabel(null); setNewLabelName(""); setNewLabelColor("#3498db"); setNewLabelDescription("") }}
+                        className="tag-btn-cancel"
+                      >
+                        ✕ Cancel
                       </button>
-                    </form>
-                  </section>
-
-                  <section className="config-section">
-                    <h3>Companies ({companies.length})</h3>
-                    {companies.length > 0 ? (
-                      <div className="tag-list">
-                        {companies.map((company) => (
-                          <div key={company} className="tag-item">
-                            <div className="tag-item-content">
-                              <span className="tag-icon">🏢</span>
-                              <span className="tag-name">{company}</span>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveCompany(company)}
-                              className="tag-btn-delete"
-                              title="Delete company"
-                            >
-                              🗑
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="empty-message">
-                        No companies added yet. Add one above!
-                      </p>
                     )}
-                  </section>
-                </>
-              )}
+                  </div>
+                </form>
+              </section>
 
-              {activeTab === "executives" && (
-                <>
-                  <section className="config-section">
-                    <h3>{editingAE ? "Edit" : "Add New"} Account Executive</h3>
-                    <form
-                      onSubmit={
-                        editingAE
-                          ? handleUpdateAccountExecutive
-                          : handleAddAccountExecutive
-                      }
-                      className="tag-form"
-                    >
-                      <input
-                        type="text"
-                        placeholder="Name (e.g., John Smith)"
-                        value={newAEName}
-                        onChange={(e) => setNewAEName(e.target.value)}
-                        className="tag-input"
-                        required
-                      />
-                      <input
-                        type="email"
-                        placeholder="Email (optional)"
-                        value={newAEEmail}
-                        onChange={(e) => setNewAEEmail(e.target.value)}
-                        className="tag-input"
-                      />
-                      <div className="form-buttons">
-                        <button type="submit" className="tag-btn-add">
-                          {editingAE ? "💾 Update" : "➕ Add"} Executive
-                        </button>
-                        {editingAE && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingAE(null)
-                              setNewAEName("")
-                              setNewAEEmail("")
-                            }}
-                            className="tag-btn-cancel"
-                          >
-                            ✕ Cancel
-                          </button>
-                        )}
-                      </div>
-                    </form>
-                  </section>
-
-                  <section className="config-section">
-                    <h3>Account Executives ({accountExecutives.length})</h3>
-                    {accountExecutives.length > 0 ? (
-                      <div className="tag-list">
-                        {accountExecutives.map((ae) => (
-                          <div key={ae.id} className="tag-item">
-                            <div className="tag-item-content">
-                              <span className="tag-icon">👤</span>
-                              <div className="ae-info">
-                                <span className="ae-name">{ae.name}</span>
-                                {ae.email && (
-                                  <span className="ae-email">{ae.email}</span>
-                                )}
+              <section className="config-section">
+                <h3>Tags ({allLabels.length})</h3>
+                {allLabels.length > 0 ? (
+                  <div className="label-groups">
+                    {Object.entries(grouped).map(([group, groupLabels]) => (
+                      <div key={group} className="label-group">
+                        <div className="label-group-header" aria-label={`Group: ${group}`}>{group}</div>
+                        <div className="tag-list">
+                          {groupLabels.map((label) => (
+                            <div key={label.id} className="tag-item">
+                              <div className="tag-item-content">
+                                <span className="label-dot" style={{ background: label.color }} aria-hidden="true" />
+                                <div className="label-info">
+                                  <span
+                                    className="label-pill-display"
+                                    style={{
+                                      background: `${label.color}22`,
+                                      color: label.color,
+                                      border: `1px solid ${label.color}44`,
+                                    }}
+                                  >
+                                    {label.name}
+                                  </span>
+                                  {label.description && (
+                                    <span className="label-desc-preview">{label.description}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="tag-actions">
+                                <button onClick={() => startEditingLabel(label)} className="tag-btn-edit" aria-label={`Edit tag ${label.name}`}>✎</button>
+                                <button onClick={() => handleRemoveLabel(label.id)} className="tag-btn-delete" aria-label={`Delete tag ${label.name}`}>🗑</button>
                               </div>
                             </div>
-                            <div className="tag-actions">
-                              <button
-                                onClick={() => startEditingAE(ae)}
-                                className="tag-btn-edit"
-                                title="Edit"
-                              >
-                                ✎
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleRemoveAccountExecutive(ae.id)
-                                }
-                                className="tag-btn-delete"
-                                title="Delete"
-                              >
-                                🗑
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="empty-message">
-                        No account executives added yet. Add one above!
-                      </p>
-                    )}
-                  </section>
-                </>
-              )}
-
-              {activeTab === "labels" && (
-                <>
-                  <section className="config-section">
-                    <h3>{editingLabel ? "Edit" : "Create New"} Label</h3>
-                    <p className="label-help-text">
-                      Use <code>tag:subtag</code> format for scoped labels (e.g., status:pending, priority:high)
-                    </p>
-                    <form
-                      onSubmit={editingLabel ? handleUpdateLabel : handleAddLabel}
-                      className="tag-form"
-                    >
-                      <input
-                        type="text"
-                        placeholder="Label name (e.g., status:pending)"
-                        value={newLabelName}
-                        onChange={(e) => setNewLabelName(e.target.value)}
-                        className="tag-input"
-                        required
-                      />
-                      <div className="label-color-row">
-                        <label className="label-color-label">Color:</label>
-                        <div className="label-color-options">
-                          {[
-                            "#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c",
-                            "#3498db", "#9b59b6", "#e91e63", "#607d8b", "#795548",
-                          ].map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              className={`label-color-swatch ${newLabelColor === color ? "active" : ""}`}
-                              style={{ background: color }}
-                              onClick={() => setNewLabelColor(color)}
-                              title={color}
-                            />
                           ))}
-                          <input
-                            type="color"
-                            value={newLabelColor}
-                            onChange={(e) => setNewLabelColor(e.target.value)}
-                            className="label-color-custom"
-                            title="Custom color"
-                          />
                         </div>
                       </div>
-                      {/* Preview */}
-                      {newLabelName.trim() && (
-                        <div className="label-preview">
-                          <span className="label-preview-text">Preview:</span>
-                          <span
-                            className="label-preview-pill"
-                            style={{
-                              background: `${newLabelColor}22`,
-                              color: newLabelColor,
-                              border: `1px solid ${newLabelColor}44`,
-                            }}
-                          >
-                            {newLabelName.trim()}
-                          </span>
-                        </div>
-                      )}
-                      <div className="form-buttons">
-                        <button type="submit" className="tag-btn-add">
-                          {editingLabel ? "💾 Update" : "➕ Add"} Label
-                        </button>
-                        {editingLabel && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingLabel(null)
-                              setNewLabelName("")
-                              setNewLabelColor("#3498db")
-                            }}
-                            className="tag-btn-cancel"
-                          >
-                            ✕ Cancel
-                          </button>
-                        )}
-                      </div>
-                    </form>
-                  </section>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-message">No tags created yet.</p>
+                )}
+              </section>
+            </>
+          )}
 
-                  <section className="config-section">
-                    <h3>Labels ({allLabels.length})</h3>
-                    {allLabels.length > 0 ? (
-                      <div className="label-groups">
-                        {Object.entries(grouped).map(([group, groupLabels]) => (
-                          <div key={group} className="label-group">
-                            <div className="label-group-header">{group}</div>
-                            <div className="tag-list">
-                              {groupLabels.map((label) => (
-                                <div key={label.id} className="tag-item">
-                                  <div className="tag-item-content">
-                                    <span
-                                      className="label-dot"
-                                      style={{ background: label.color }}
-                                    />
-                                    <span
-                                      className="label-pill-display"
-                                      style={{
-                                        background: `${label.color}22`,
-                                        color: label.color,
-                                        border: `1px solid ${label.color}44`,
-                                      }}
-                                    >
-                                      {label.name}
-                                    </span>
-                                  </div>
-                                  <div className="tag-actions">
-                                    <button
-                                      onClick={() => startEditingLabel(label)}
-                                      className="tag-btn-edit"
-                                      title="Edit"
-                                    >
-                                      ✎
-                                    </button>
-                                    <button
-                                      onClick={() => handleRemoveLabel(label.id)}
-                                      className="tag-btn-delete"
-                                      title="Delete"
-                                    >
-                                      🗑
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
+          {/* ── EXPORT & SYNC ── */}
+          {activeTab === "export" && (
+            <>
+              <section className="config-section">
+                <h3>Manual Export</h3>
+                <p className="label-help-text">Download a snapshot of your data right now.</p>
+                <div className="export-format-grid">
+                  {EXPORT_FORMATS.map((f) => (
+                    <div key={f.value} className="export-format-card">
+                      <div className="export-format-info">
+                        <span className="export-format-name">{f.label}</span>
+                        <span className="export-format-desc">{f.desc}</span>
                       </div>
+                      <button
+                        className="export-dl-btn"
+                        onClick={() => handleManualExport(f.value)}
+                        aria-label={`Download ${f.label} export`}
+                      >
+                        ⬇ Download
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {exportStatus && (
+                  <p className="export-status" role="status" aria-live="polite">{exportStatus}</p>
+                )}
+              </section>
+
+              <section className="config-section">
+                <h3>Auto Sync to Folder</h3>
+                <p className="label-help-text">
+                  Select a local folder and enable automatic periodic exports. Uses the{" "}
+                  <strong>File System Access API</strong> — supported in Chrome/Edge/Electron.
+                </p>
+
+                <div className="sync-folder-row">
+                  <div className="sync-folder-display" aria-label="Selected folder">
+                    {config.syncFolderName ? (
+                      <span className="sync-folder-name">📁 {config.syncFolderName}</span>
                     ) : (
-                      <p className="empty-message">
-                        No labels created yet. Add one above!
-                      </p>
+                      <span className="sync-folder-none">No folder selected</span>
                     )}
-                  </section>
-                </>
-              )}
-            </div>
-          </div>
+                  </div>
+                  <button
+                    className="tag-btn-add sync-pick-btn"
+                    onClick={onSelectSyncFolder}
+                    disabled={!window.showDirectoryPicker}
+                    aria-label="Choose export folder"
+                  >
+                    📂 Choose Folder
+                  </button>
+                </div>
+                {!window.showDirectoryPicker && (
+                  <p className="sync-unavailable">
+                    ⚠️ Folder picker is not available in this browser. Use Chrome, Edge, or the Electron app.
+                  </p>
+                )}
+
+                <div className="sync-options">
+                  <div className="config-option">
+                    <label htmlFor="auto-sync-toggle">
+                      <input
+                        id="auto-sync-toggle"
+                        type="checkbox"
+                        checked={config.autoSyncEnabled || false}
+                        disabled={!config.syncFolderName}
+                        onChange={(e) => handleConfigChange("autoSyncEnabled", e.target.checked)}
+                      />
+                      Enable automatic sync
+                    </label>
+                    {!config.syncFolderName && (
+                      <span className="help-text">Select a folder above to enable.</span>
+                    )}
+                  </div>
+
+                  <div className="config-option">
+                    <label htmlFor="sync-interval-select">Sync interval</label>
+                    <select
+                      id="sync-interval-select"
+                      className="sync-interval-select"
+                      value={config.syncInterval || 60}
+                      onChange={(e) => handleConfigChange("syncInterval", Number(e.target.value))}
+                      disabled={!config.autoSyncEnabled}
+                    >
+                      {SYNC_INTERVALS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="config-option">
+                    <label htmlFor="sync-format-select">Sync file format</label>
+                    <select
+                      id="sync-format-select"
+                      className="sync-interval-select"
+                      value={config.exportFormat || "json"}
+                      onChange={(e) => handleConfigChange("exportFormat", e.target.value)}
+                    >
+                      {EXPORT_FORMATS.map((f) => (
+                        <option key={f.value} value={f.value}>{f.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {config.lastSyncAt && (
+                    <p className="last-sync-text">
+                      Last synced: {new Date(config.lastSyncAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       <style>{`
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+
         .config-modal-overlay {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          inset: 0;
           background: rgba(0, 0, 0, 0.5);
           display: flex;
           align-items: center;
@@ -549,33 +686,29 @@ function ConfigManager({
           animation: fadeIn 0.2s ease;
         }
 
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         .config-modal {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
           background: var(--card);
           border-radius: 12px;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
           width: 90%;
-          max-width: 700px;
+          max-width: 720px;
           max-height: 90vh;
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          animation: slideUp 0.3s ease;
+          z-index: 1001;
+          animation: slideUp 0.25s ease;
         }
 
         @keyframes slideUp {
-          from {
-            transform: translateY(20px);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
+          from { transform: translate(-50%, calc(-50% + 16px)); opacity: 0; }
+          to   { transform: translate(-50%, -50%); opacity: 1; }
         }
 
         .config-header {
@@ -596,10 +729,9 @@ function ConfigManager({
         .btn-close {
           background: none;
           border: none;
-          font-size: 24px;
+          font-size: 20px;
           cursor: pointer;
-          color: var(--text);
-          padding: 0;
+          color: var(--text-muted);
           width: 32px;
           height: 32px;
           display: flex;
@@ -609,10 +741,8 @@ function ConfigManager({
           transition: all 0.2s;
         }
 
-        .btn-close:hover {
-          background: var(--background);
-          color: var(--primary);
-        }
+        .btn-close:hover { background: var(--background); color: var(--text); }
+        .btn-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
         .config-tabs {
           display: flex;
@@ -621,53 +751,39 @@ function ConfigManager({
           border-bottom: 1px solid var(--border);
           overflow-x: auto;
           flex-shrink: 0;
+          scrollbar-width: none;
         }
+        .config-tabs::-webkit-scrollbar { display: none; }
 
         .tab-btn {
-          padding: 8px 16px;
+          padding: 7px 14px;
           background: transparent;
           border: 1px solid transparent;
           border-radius: 6px;
           cursor: pointer;
           color: var(--text-muted);
           font-weight: 600;
-          font-size: 14px;
-          transition: all 0.2s;
+          font-size: 13px;
+          transition: all 0.15s;
           white-space: nowrap;
         }
 
-        .tab-btn:hover {
-          background: var(--background);
-          color: var(--text);
-        }
-
-        .tab-btn.active {
-          background: var(--primary);
-          color: white;
-          border-color: var(--primary);
-        }
+        .tab-btn:hover { background: var(--background); color: var(--text); }
+        .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .tab-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
         .config-content {
           flex: 1;
           overflow-y: auto;
           padding: 20px;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
         }
 
-        .config-section {
-          margin-bottom: 24px;
-        }
+        .config-section { margin-bottom: 28px; }
+        .config-section h3 { margin: 0 0 12px; font-size: 15px; color: var(--text); font-weight: 600; }
 
-        .config-section h3 {
-          margin: 0 0 12px;
-          font-size: 16px;
-          color: var(--text);
-          font-weight: 600;
-        }
-
-        .config-option {
-          margin-bottom: 12px;
-        }
-
+        .config-option { margin-bottom: 12px; }
         .config-option label {
           display: flex;
           align-items: center;
@@ -676,25 +792,21 @@ function ConfigManager({
           color: var(--text);
           font-size: 14px;
         }
-
-        .config-option input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-        }
+        .config-option input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
 
         .help-text {
           display: block;
           font-size: 12px;
           color: var(--text-muted);
           margin-top: 4px;
-          margin-left: 26px;
+          margin-left: 24px;
         }
 
+        /* Themes */
         .themes-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: 10px;
           margin-bottom: 12px;
         }
 
@@ -705,9 +817,9 @@ function ConfigManager({
           border-radius: 8px;
           padding: 14px;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.15s;
           text-align: center;
-          min-height: 80px;
+          min-height: 72px;
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -715,208 +827,132 @@ function ConfigManager({
           position: relative;
         }
 
-        .theme-card:hover {
-          border-color: var(--primary);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          transform: translateY(-2px);
-        }
-
-        .theme-card:focus-visible {
-          outline: 2px solid var(--primary);
-          outline-offset: 2px;
-        }
-
-        .theme-card.active {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px var(--primary), 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
+        .theme-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+        .theme-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .theme-card.active { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(52,152,219,0.2); }
         .theme-card.active::after {
           content: "✓";
           position: absolute;
           top: 6px;
           right: 8px;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 700;
           color: var(--primary);
         }
 
-        .theme-name {
-          font-weight: 700;
-          font-size: 15px;
-          margin-bottom: 6px;
-          line-height: 1.3;
-          color: var(--text);
-        }
+        .theme-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; color: var(--text); }
+        .theme-desc { font-size: 12px; color: var(--text-muted); }
 
-        .theme-desc {
+        /* Company type */
+        .type-fieldset { border: none; padding: 0; margin: 0; display: flex; gap: 10px; }
+        .type-radio { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        .type-radio input[type="radio"] { accent-color: var(--primary); width: 15px; height: 15px; }
+        .type-chip {
+          padding: 4px 12px;
+          border-radius: 20px;
           font-size: 13px;
-          line-height: 1.4;
-          color: var(--text-muted);
+          font-weight: 600;
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: all 0.15s;
         }
+        .company-chip { background: rgba(52,152,219,0.12); color: #2980b9; border-color: rgba(52,152,219,0.3); }
+        .vendor-chip { background: rgba(230,126,34,0.12); color: #d35400; border-color: rgba(230,126,34,0.3); }
 
-        .tag-form {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          margin-bottom: 12px;
+        .type-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .company-dot { background: #3498db; }
+        .vendor-dot { background: #e67e22; }
+
+        .type-badge-small {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+          padding: 1px 6px;
+          border-radius: 8px;
+          margin-left: 6px;
         }
+        .type-badge-small.company { background: rgba(52,152,219,0.12); color: #2980b9; }
+        .type-badge-small.vendor { background: rgba(230,126,34,0.12); color: #d35400; }
+
+        /* Forms */
+        .tag-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
 
         .tag-input {
-          padding: 10px 12px;
+          padding: 9px 12px;
           border: 1px solid var(--border);
           border-radius: 6px;
           font-size: 14px;
           color: var(--text);
           background: var(--background);
           font-family: inherit;
+          transition: border-color 0.15s;
         }
+        .tag-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(52,152,219,0.1); }
+        .tag-input::placeholder { color: var(--text-muted); }
+        .tag-description-input { resize: vertical; min-height: 52px; line-height: 1.4; }
 
-        .tag-input:focus {
-          outline: none;
-          border-color: var(--primary);
-          box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
-        }
+        .form-buttons { display: flex; gap: 8px; }
 
-        .tag-input::placeholder {
-          color: var(--text-muted);
-        }
-
-        .form-buttons {
-          display: flex;
-          gap: 8px;
-        }
-
-        .tag-form button {
-          position: relative;
-          z-index: 1;
-        }
-
-        .tag-btn-add,
-        .tag-btn-cancel {
-          padding: 11px 16px;
+        .tag-btn-add, .tag-btn-cancel {
+          padding: 10px 16px;
           border: none;
           border-radius: 6px;
           cursor: pointer;
           font-weight: 600;
           font-size: 14px;
-          transition: all 0.3s ease;
+          transition: all 0.2s;
           flex: 1;
           white-space: nowrap;
         }
 
-        .tag-btn-add {
-          background: var(--primary);
-          color: white;
-          box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
-        }
+        .tag-btn-add { background: var(--primary); color: #fff; }
+        .tag-btn-add:hover { opacity: 0.9; }
+        .tag-btn-add:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .tag-btn-add:disabled { opacity: 0.45; cursor: default; }
 
-        .tag-btn-add:hover {
-          opacity: 0.95;
-          box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
-          transform: translateY(-1px);
-        }
+        .tag-btn-cancel { background: var(--background); color: var(--text); border: 1px solid var(--border); }
+        .tag-btn-cancel:hover { background: var(--border); }
 
-        .tag-btn-add:active {
-          transform: translateY(0);
-        }
-
-        .tag-btn-cancel {
-          background: var(--background);
-          color: var(--text);
-          border: 1px solid var(--border);
-        }
-
-        .tag-btn-cancel:hover {
-          background: var(--border);
-        }
-
-        .tag-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
+        .tag-list { display: flex; flex-direction: column; gap: 8px; }
 
         .tag-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 12px;
+          padding: 10px 12px;
           background: var(--background);
           border: 1px solid var(--border);
           border-radius: 6px;
-          transition: all 0.2s;
+          gap: 10px;
+          transition: border-color 0.15s;
         }
+        .tag-item:hover { border-color: var(--primary); }
 
-        .tag-item:hover {
-          border-color: var(--primary);
-          background: var(--card);
-        }
+        .tag-item-content { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+        .tag-icon { font-size: 16px; flex-shrink: 0; }
+        .tag-name { color: var(--text); font-weight: 600; font-size: 14px; }
 
-        .tag-item-content {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex: 1;
-          min-width: 0;
-        }
+        .ae-info { display: flex; flex-direction: column; gap: 1px; }
+        .ae-name { color: var(--text); font-weight: 600; font-size: 14px; }
+        .ae-email { color: var(--text-muted); font-size: 12px; }
 
-        .tag-icon {
-          font-size: 18px;
-          flex-shrink: 0;
-        }
+        .tag-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
-        .tag-name {
-          color: var(--text);
-          font-weight: 600;
-          font-size: 14px;
-        }
-
-        .ae-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          text-align: left;
-        }
-
-        .ae-name {
-          color: var(--text);
-          font-weight: 600;
-          font-size: 14px;
-        }
-
-        .ae-email {
-          color: var(--text-muted);
-          font-size: 12px;
-        }
-
-        .tag-actions {
-          display: flex;
-          gap: 4px;
-          flex-shrink: 0;
-        }
-
-        .tag-btn-edit,
-        .tag-btn-delete {
+        .tag-btn-edit, .tag-btn-delete {
           background: transparent;
           border: 1px solid var(--border);
           border-radius: 4px;
           cursor: pointer;
           padding: 4px 8px;
           font-size: 14px;
-          transition: all 0.2s;
+          transition: all 0.15s;
           color: var(--text);
         }
-
-        .tag-btn-edit:hover {
-          border-color: #3498db;
-          color: #3498db;
-        }
-
-        .tag-btn-delete:hover {
-          border-color: #e74c3c;
-          color: #e74c3c;
-        }
+        .tag-btn-edit:hover { border-color: #3498db; color: #3498db; }
+        .tag-btn-edit:focus-visible { outline: 2px solid #3498db; outline-offset: 2px; }
+        .tag-btn-delete:hover { border-color: #e74c3c; color: #e74c3c; }
+        .tag-btn-delete:focus-visible { outline: 2px solid #e74c3c; outline-offset: 2px; }
 
         .empty-message {
           text-align: center;
@@ -927,158 +963,108 @@ function ConfigManager({
           margin: 0;
         }
 
-        .config-content::-webkit-scrollbar {
-          width: 6px;
-        }
+        /* Labels */
+        .label-help-text { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; line-height: 1.4; }
+        .label-help-text code { background: var(--background); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--primary); }
 
-        .config-content::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .config-content::-webkit-scrollbar-thumb {
-          background: var(--border);
-          border-radius: 3px;
-        }
-
-        .config-content::-webkit-scrollbar-thumb:hover {
-          background: var(--text-muted);
-        }
-
-        /* Labels tab */
-        .label-help-text {
-          font-size: 13px;
-          color: var(--text-muted);
-          margin: 0 0 12px;
-          line-height: 1.4;
-        }
-
-        .label-help-text code {
-          background: var(--background);
-          padding: 2px 6px;
-          border-radius: 3px;
-          font-size: 12px;
-          color: var(--primary);
-        }
-
-        .label-color-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .label-color-label {
-          font-size: 13px;
-          font-weight: 600;
-          color: var(--text);
-          flex-shrink: 0;
-        }
-
-        .label-color-options {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-          align-items: center;
-        }
+        .label-color-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .label-color-label { font-size: 13px; font-weight: 600; color: var(--text); flex-shrink: 0; }
+        .label-color-options { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
         .label-color-swatch {
-          width: 24px;
-          height: 24px;
+          width: 22px;
+          height: 22px;
           border-radius: 50%;
           border: 2px solid transparent;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: transform 0.12s;
           padding: 0;
         }
+        .label-color-swatch:hover { transform: scale(1.2); }
+        .label-color-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--card); }
+        .label-color-swatch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-        .label-color-swatch:hover {
-          transform: scale(1.15);
-        }
+        .label-color-custom { width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; padding: 0; background: none; }
 
-        .label-color-swatch.active {
-          border-color: var(--text);
-          box-shadow: 0 0 0 2px var(--card);
-        }
+        .label-preview { display: flex; align-items: center; gap: 8px; }
+        .label-preview-text { font-size: 12px; color: var(--text-muted); }
+        .label-preview-pill { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 
-        .label-color-custom {
-          width: 24px;
-          height: 24px;
+        .label-groups { display: flex; flex-direction: column; gap: 14px; }
+        .label-group-header { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+        .label-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .label-pill-display { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+
+        .label-info { display: flex; flex-direction: column; gap: 2px; }
+        .label-desc-preview { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+
+        /* Export */
+        .export-format-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+
+        .export-format-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 14px;
+          background: var(--background);
           border: 1px solid var(--border);
-          border-radius: 4px;
-          cursor: pointer;
-          padding: 0;
-          background: none;
+          border-radius: 8px;
+          gap: 12px;
         }
 
-        .label-preview {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
+        .export-format-info { display: flex; flex-direction: column; gap: 2px; }
+        .export-format-name { font-weight: 600; font-size: 14px; color: var(--text); }
+        .export-format-desc { font-size: 12px; color: var(--text-muted); }
 
-        .label-preview-text {
-          font-size: 12px;
-          color: var(--text-muted);
-        }
-
-        .label-preview-pill {
-          display: inline-flex;
-          align-items: center;
-          padding: 3px 10px;
-          border-radius: 12px;
-          font-size: 12px;
+        .export-dl-btn {
+          background: var(--primary);
+          color: #fff;
+          border: none;
+          border-radius: 6px;
+          padding: 7px 14px;
+          font-size: 13px;
           font-weight: 600;
-        }
-
-        .label-groups {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .label-group-header {
-          font-size: 12px;
-          font-weight: 700;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 6px;
-          padding-bottom: 4px;
-          border-bottom: 1px solid var(--border);
-        }
-
-        .label-dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: opacity 0.15s;
           flex-shrink: 0;
         }
+        .export-dl-btn:hover { opacity: 0.88; }
+        .export-dl-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-        .label-pill-display {
-          display: inline-flex;
-          align-items: center;
-          padding: 3px 10px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 600;
+        .export-status { font-size: 13px; color: #27ae60; margin: 4px 0 0; font-weight: 500; }
+
+        .sync-folder-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+        .sync-folder-display { flex: 1; min-width: 0; }
+        .sync-folder-name { font-size: 13px; color: var(--text); font-weight: 500; word-break: break-all; }
+        .sync-folder-none { font-size: 13px; color: var(--text-muted); font-style: italic; }
+        .sync-pick-btn { flex: none; padding: 9px 14px; }
+        .sync-unavailable { font-size: 12px; color: #e67e22; margin: 4px 0 0; }
+
+        .sync-options { display: flex; flex-direction: column; gap: 12px; }
+
+        .sync-interval-select {
+          margin-left: 8px;
+          padding: 5px 10px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: var(--background);
+          color: var(--text);
+          font-size: 13px;
+          cursor: pointer;
         }
+        .sync-interval-select:disabled { opacity: 0.5; cursor: default; }
+        .sync-interval-select:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        .last-sync-text { font-size: 12px; color: var(--text-muted); margin: 0; }
 
         @media (max-width: 600px) {
-          .config-modal {
-            width: 95%;
-            max-height: 95vh;
-          }
-
-          .themes-grid {
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-          }
-
-          .config-tabs {
-            flex-wrap: wrap;
-          }
-
-          .form-buttons {
-            flex-direction: column;
-          }
+          .config-modal { width: 98%; max-height: 96vh; }
+          .themes-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+          .config-tabs { flex-wrap: wrap; }
+          .form-buttons { flex-direction: column; }
+          .export-format-card { flex-direction: column; align-items: flex-start; }
+          .export-dl-btn { width: 100%; }
         }
       `}</style>
     </>

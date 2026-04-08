@@ -13,11 +13,17 @@ export const CONFIG_FILENAME = "config.json"
 // CONFIG MANAGEMENT
 export function getDefaultConfig() {
   return {
-    theme: "modern-light",
+    theme: "github-dark",
     sidebarPosition: "left",
     compactMode: false,
     showCompletedByDefault: false,
     defaultView: "company",
+    // Export / sync settings
+    syncFolderName: "",
+    syncInterval: 60,
+    autoSyncEnabled: false,
+    exportFormat: "json",
+    lastSyncAt: null,
   }
 }
 
@@ -339,8 +345,9 @@ export function loadContactsLocalStorageSync() {
 
 export async function loadContactsLocalStorage() {
   const content = await persistence.load(CONTACTS_FILENAME)
+  if (content === null || content === undefined) return getDefaultContacts()
   return parseContactsFile(
-    typeof content === "string" ? content : JSON.stringify(content || {}),
+    typeof content === "string" ? content : JSON.stringify(content),
   )
 }
 

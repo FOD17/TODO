@@ -7,6 +7,7 @@ function Sidebar({
   stats,
   tags,
   onTagsChange,
+  companyTypes = {},
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState({})
@@ -99,6 +100,8 @@ function Sidebar({
   // --- Render helpers ---
   const renderCompanyItem = (company, indented = false) => {
     const isDragging = draggedCompany === company
+    const type = companyTypes[company] || "company"
+    const isVendor = type === "vendor"
     return (
       <div
         key={company}
@@ -108,18 +111,20 @@ function Sidebar({
         onDragEnd={handleDragEnd}
       >
         <button
-          className={`nav-item ${selectedCompany === company ? "active" : ""}`}
+          className={`nav-item ${selectedCompany === company ? "active" : ""} ${isVendor ? "nav-item-vendor" : "nav-item-company"}`}
           onClick={() => onSelectCompany(company)}
+          aria-current={selectedCompany === company ? "page" : undefined}
           title={
             collapsed
-              ? `${company} (${getCompanyCount(company)})`
+              ? `${company} (${getCompanyCount(company)}) — ${type}`
               : undefined
           }
         >
-          <span className="nav-icon">🏢</span>
+          <span className="nav-icon" aria-hidden="true">{isVendor ? "🔧" : "🏢"}</span>
           {!collapsed && (
             <>
               <span className="nav-label">{company}</span>
+              <span className={`type-indicator ${type}`} aria-label={type} />
               <span className="badge">{getCompanyCount(company)}</span>
             </>
           )}
@@ -188,14 +193,32 @@ function Sidebar({
         </button>
       </div>
 
-      <nav className="projects-nav">
+      <nav className="projects-nav" aria-label="Project navigation">
+        {/* Personal */}
+        <button
+          className={`nav-item nav-item-personal ${selectedCompany === "Personal" ? "active" : ""}`}
+          onClick={() => onSelectCompany("Personal")}
+          aria-current={selectedCompany === "Personal" ? "page" : undefined}
+          title={collapsed ? `Personal (${stats?.["Personal"] || 0})` : undefined}
+        >
+          <span className="nav-icon" aria-hidden="true">👤</span>
+          {!collapsed && (
+            <>
+              <span className="nav-label">Personal</span>
+              <span className="badge">{stats?.["Personal"] || 0}</span>
+            </>
+          )}
+          {collapsed && <span className="badge-collapsed">{stats?.["Personal"] || 0}</span>}
+        </button>
+
         {/* All Tasks */}
         <button
           className={`nav-item ${selectedCompany === "All" ? "active" : ""}`}
           onClick={() => onSelectCompany("All")}
+          aria-current={selectedCompany === "All" ? "page" : undefined}
           title={collapsed ? `All Tasks (${stats?.total || 0})` : undefined}
         >
-          <span className="nav-icon">🎯</span>
+          <span className="nav-icon" aria-hidden="true">🎯</span>
           {!collapsed && (
             <>
               <span className="nav-label">All Tasks</span>
@@ -382,6 +405,16 @@ function Sidebar({
           border-color: var(--primary);
         }
 
+        .collapse-btn:focus-visible {
+          outline: 2px solid var(--primary);
+          outline-offset: 2px;
+        }
+
+        .nav-item:focus-visible {
+          outline: 2px solid var(--primary);
+          outline-offset: -2px;
+        }
+
         /* ===== Nav ===== */
         .projects-nav {
           flex: 1;
@@ -427,6 +460,33 @@ function Sidebar({
           background: var(--primary);
           color: white;
         }
+
+        /* Personal — subtle purple tint */
+        .nav-item-personal:not(.active) {
+          border-left: 3px solid #9b59b6;
+        }
+        .nav-item-personal.active {
+          background: #9b59b6;
+        }
+
+        /* Vendor — orange left accent */
+        .nav-item-vendor:not(.active) {
+          border-left: 3px solid #e67e22;
+        }
+        .nav-item-vendor.active {
+          background: #e67e22;
+        }
+
+        /* Type indicator dot in nav row */
+        .type-indicator {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          opacity: 0.7;
+        }
+        .type-indicator.vendor { background: #e67e22; }
+        .type-indicator.company { background: #3498db; }
 
         .nav-icon {
           font-size: 18px;

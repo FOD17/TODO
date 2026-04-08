@@ -7,6 +7,7 @@ function Autocomplete({
   placeholder = "",
   className = "",
   renderSuggestion,
+  inputId,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(-1)
@@ -78,10 +79,18 @@ function Autocomplete({
     }
   }, [highlightIndex])
 
+  const listId = `ac-list-${placeholder.replace(/\s+/g, "-").toLowerCase() || "dropdown"}`
+
   return (
     <div className={`ac-wrapper ${className}`} ref={wrapperRef}>
       <input
+        id={inputId}
         type="text"
+        role="combobox"
+        aria-expanded={isOpen && filtered.length > 0}
+        aria-autocomplete="list"
+        aria-controls={listId}
+        aria-activedescendant={highlightIndex >= 0 ? `${listId}-option-${highlightIndex}` : undefined}
         className="ac-input"
         value={inputValue}
         onChange={handleInputChange}
@@ -91,12 +100,15 @@ function Autocomplete({
         autoComplete="off"
       />
       {isOpen && filtered.length > 0 && (
-        <div className="ac-dropdown" ref={listRef}>
+        <div className="ac-dropdown" role="listbox" id={listId} ref={listRef}>
           {filtered.map((suggestion, i) => {
             const label = typeof suggestion === "string" ? suggestion : suggestion.name || suggestion.label || ""
             return (
               <div
                 key={label + i}
+                id={`${listId}-option-${i}`}
+                role="option"
+                aria-selected={i === highlightIndex}
                 className={`ac-item ${i === highlightIndex ? "highlighted" : ""}`}
                 onMouseDown={(e) => {
                   e.preventDefault()

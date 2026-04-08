@@ -14,13 +14,13 @@ describe("Config Management Tests", () => {
     localStorage.clear()
   })
 
-  it("should return default config when no config exists", () => {
-    const config = loadConfigLocalStorage()
-    expect(config.theme).toBe("modern-light")
+  it("should return default config when no config exists", async () => {
+    const config = await loadConfigLocalStorage()
+    expect(config.theme).toBe("github-dark")
     expect(config.defaultView).toBe("company")
   })
 
-  it("should save and load config", () => {
+  it("should save and load config", async () => {
     const config = {
       theme: "modern-dark",
       sidebarPosition: "right",
@@ -29,8 +29,8 @@ describe("Config Management Tests", () => {
       defaultView: "master",
     }
 
-    saveConfigLocalStorage(config)
-    const loaded = loadConfigLocalStorage()
+    await saveConfigLocalStorage(config)
+    const loaded = await loadConfigLocalStorage()
 
     expect(loaded.theme).toBe("modern-dark")
     expect(loaded.sidebarPosition).toBe("right")
@@ -45,13 +45,13 @@ describe("Config Management Tests", () => {
     expect(defaults).toHaveProperty("defaultView")
   })
 
-  it("should support all themes", () => {
+  it("should support all themes", async () => {
     const themes = ["modern-light", "modern-dark", "forest", "ocean", "sunset"]
 
     for (const theme of themes) {
       const config = { ...getDefaultConfig(), theme }
-      saveConfigLocalStorage(config)
-      const loaded = loadConfigLocalStorage()
+      await saveConfigLocalStorage(config)
+      const loaded = await loadConfigLocalStorage()
       expect(loaded.theme).toBe(theme)
     }
   })
@@ -62,7 +62,7 @@ describe("Contacts Management Tests", () => {
     localStorage.clear()
   })
 
-  it("should save and load contacts", () => {
+  it("should save and load contacts", async () => {
     const contacts = {
       companies: {
         "Wal-Mart": {
@@ -81,8 +81,8 @@ describe("Contacts Management Tests", () => {
       tags: {},
     }
 
-    saveContactsLocalStorage(contacts)
-    const loaded = loadContactsLocalStorage()
+    await saveContactsLocalStorage(contacts)
+    const loaded = await loadContactsLocalStorage()
 
     expect(loaded.companies["Wal-Mart"]).toBeDefined()
     expect(loaded.companies["Wal-Mart"].contacts[0].name).toBe("Chris Smith")
@@ -115,7 +115,7 @@ describe("Contacts Management Tests", () => {
     expect(parsed.companies.Apple.contacts[0].name).toBe("Tim Cook")
   })
 
-  it("should support vendor contacts", () => {
+  it("should support vendor contacts", async () => {
     const contacts = {
       companies: {
         Microsoft: {
@@ -134,15 +134,15 @@ describe("Contacts Management Tests", () => {
       tags: {},
     }
 
-    saveContactsLocalStorage(contacts)
-    const loaded = loadContactsLocalStorage()
+    await saveContactsLocalStorage(contacts)
+    const loaded = await loadContactsLocalStorage()
 
     expect(loaded.companies.Microsoft.contacts[0].type).toBe("vendor")
   })
 
-  it("should return empty contacts structure on error", () => {
+  it("should return empty contacts structure on error", async () => {
     localStorage.setItem("contacts.json", "invalid json")
-    const loaded = loadContactsLocalStorage()
+    const loaded = await loadContactsLocalStorage()
 
     expect(loaded.companies).toBeDefined()
     expect(loaded.tags).toBeDefined()

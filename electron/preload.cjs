@@ -41,4 +41,7 @@ contextBridge.exposeInMainWorld("electron", {
 
   // Status
   getStatus: () => ipcRenderer.invoke("db:getStatus"),
+
+  // Health check (lightweight ping for SyncManager)
+  ping: () => ipcRenderer.invoke("db:ping"),
 })

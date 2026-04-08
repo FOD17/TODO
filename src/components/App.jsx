@@ -3,12 +3,20 @@ import {
   loadTodosLocalStorageSync,
   loadTagsLocalStorageSync,
   loadConfigLocalStorageSync,
-  loadContactsLocalStorageSync,
 } from "../utils/markdownHandler"
 import { electronAdapter } from "../utils/electronAdapter"
 import { debounce } from "../utils/debounce"
+import { seedDefaultLabels } from "../utils/tagManager"
+import {
+  buildJsonExport,
+  buildCsvExport,
+  buildMarkdownExport,
+  writeToDirectory,
+  downloadFile,
+  buildFilename,
+} from "../utils/exportUtils"
 import Sidebar from "./Sidebar"
-import MainFeed from "./MainFeed"
+import CompanyTabs from "./CompanyTabs"
 import EditTodoDrawer from "./EditTodoDrawer"
 import ConfigManager from "./ConfigManager"
 import TodoDetailModal from "./TodoDetailModal"
@@ -16,16 +24,20 @@ import TodoDetailModal from "./TodoDetailModal"
 // Initialize tags with new format if needed
 const initializeTags = () => {
   const loaded = loadTagsLocalStorageSync()
-  // If old format (object) or empty, convert to new format
   if (typeof loaded !== "object" || loaded === null || !loaded.companies) {
-    return { companies: [], accountExecutives: [], companyAssignments: {}, labels: [] }
+    return { companies: [], accountExecutives: [], companyAssignments: {}, companyTypes: {}, labels: [] }
   }
-  return { ...loaded, companyAssignments: loaded.companyAssignments || {}, labels: loaded.labels || [] }
+  return {
+    ...loaded,
+    companyAssignments: loaded.companyAssignments || {},
+    companyTypes: loaded.companyTypes || {},
+    labels: loaded.labels || [],
+  }
 }
 
 function App() {
   const [todos, setTodos] = useState(loadTodosLocalStorageSync())
-  const [tags, setTags] = useState(initializeTags())
+  const [tags, setTags] = useState(() => seedDefaultLabels(initializeTags()))
   const [config, setConfig] = useState(loadConfigLocalStorageSync())
   const [selectedCompany, setSelectedCompany] = useState("All")
   const [showConfig, setShowConfig] = useState(false)
@@ -34,15 +46,15 @@ function App() {
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
   const [detailTodo, setDetailTodo] = useState(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState("tasks")
+  const [audioMessages, setAudioMessages] = useState([])
+  const [emails, setEmails] = useState([])
 
   // Get company list — merge from todos AND tags
+  // Only show companies that are explicitly in tags — removing via settings hides them immediately
   const allCompanies = useMemo(() => {
-    const fromTodos = [...todos.active, ...todos.completed]
-      .map((t) => t.company)
-      .filter(Boolean)
-    const fromTags = tags.companies || []
-    return Array.from(new Set([...fromTodos, ...fromTags])).sort()
-  }, [todos, tags])
+    return (tags.companies || []).slice().sort()
+  }, [tags])
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -65,6 +77,10 @@ function App() {
         (t) => t.company === company,
       ).length
     })
+    // Personal = todos with no company or company="Personal"
+    companyStats["Personal"] = todos.active.filter(
+      (t) => !t.company || t.company === "Personal",
+    ).length
 
     return {
       total: totalActive,
@@ -92,6 +108,99 @@ function App() {
     }, 500),
   ).current
 
+  // Save audio messages
+  const saveAudioMessagesFn = useRef(
+    debounce((data) => {
+      electronAdapter.saveAudioMessages(data).catch((e) => {
+        console.error("Failed to save audio messages:", e)
+      })
+    }, 500),
+  ).current
+
+  // Save emails
+  const saveEmailsFn = useRef(
+    debounce((data) => {
+      electronAdapter.saveEmails(data).catch((e) => {
+        console.error("Failed to save emails:", e)
+      })
+    }, 500),
+  ).current
+
+  // Sync directory handle — persisted in ref (not state, not serialised)
+  const syncDirHandleRef = useRef(null)
+  const syncIntervalRef = useRef(null)
+
+  const runExport = useCallback(async (currentTodos, currentTags, currentEmails, currentConfig, dirHandle) => {
+    const handle = dirHandle || syncDirHandleRef.current
+    if (!handle) return
+    const format = currentConfig.exportFormat || "json"
+    let content, filename
+    if (format === "csv") {
+      content = buildCsvExport({ todos: currentTodos })
+      filename = buildFilename("csv")
+    } else if (format === "markdown") {
+      content = buildMarkdownExport({ todos: currentTodos, tags: currentTags })
+      filename = buildFilename("markdown")
+    } else {
+      content = buildJsonExport({ todos: currentTodos, tags: currentTags, emails: currentEmails })
+      filename = buildFilename("json")
+    }
+    try {
+      await writeToDirectory(handle, filename, content)
+      const now = new Date().toISOString()
+      setConfig((prev) => ({ ...prev, lastSyncAt: now }))
+    } catch (e) {
+      console.error("Sync export failed:", e)
+    }
+  }, [])
+
+  // Start / restart the auto-sync interval whenever config changes
+  useEffect(() => {
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current)
+      syncIntervalRef.current = null
+    }
+    if (config.autoSyncEnabled && syncDirHandleRef.current) {
+      const ms = (config.syncInterval || 60) * 60 * 1000
+      syncIntervalRef.current = setInterval(() => {
+        setTodos((t) => { runExport(t, tags, emails, config, null); return t })
+      }, ms)
+    }
+    return () => {
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.autoSyncEnabled, config.syncInterval])
+
+  const handleManualExport = useCallback((format) => {
+    const content =
+      format === "csv" ? buildCsvExport({ todos }) :
+      format === "markdown" ? buildMarkdownExport({ todos, tags }) :
+      buildJsonExport({ todos, tags, emails })
+    const filename = buildFilename(format)
+    const mime =
+      format === "csv" ? "text/csv" :
+      format === "markdown" ? "text/markdown" :
+      "application/json"
+    downloadFile(content, filename, mime)
+  }, [todos, tags, emails])
+
+  const handleSelectSyncFolder = useCallback(async () => {
+    if (!window.showDirectoryPicker) return
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite" })
+      syncDirHandleRef.current = handle
+      const name = handle.name
+      setConfig((prev) => {
+        const updated = { ...prev, syncFolderName: name }
+        electronAdapter.updateConfig(updated).catch(() => {})
+        return updated
+      })
+    } catch (e) {
+      if (e.name !== "AbortError") console.error("Folder picker error:", e)
+    }
+  }, [])
+
   const handleConfigChange = useCallback((newConfig) => {
     setConfig(newConfig)
   }, [])
@@ -114,22 +223,25 @@ function App() {
           electronAdapter.getConfig(),
         ])
 
+        const [loadedAudio, loadedEmails] = await Promise.all([
+          electronAdapter.getAudioMessages(),
+          electronAdapter.getEmails(),
+        ])
+
         if (loadedTodos) setTodos(loadedTodos)
         if (loadedTags) {
-          setTags({
-            companies: Array.isArray(loadedTags.companies)
-              ? loadedTags.companies
-              : [],
-            accountExecutives: Array.isArray(loadedTags.accountExecutives)
-              ? loadedTags.accountExecutives
-              : [],
+          const normalised = {
+            companies: Array.isArray(loadedTags.companies) ? loadedTags.companies : [],
+            accountExecutives: Array.isArray(loadedTags.accountExecutives) ? loadedTags.accountExecutives : [],
             companyAssignments: loadedTags.companyAssignments || {},
-            labels: Array.isArray(loadedTags.labels)
-              ? loadedTags.labels
-              : [],
-          })
+            companyTypes: loadedTags.companyTypes || {},
+            labels: Array.isArray(loadedTags.labels) ? loadedTags.labels : [],
+          }
+          setTags(seedDefaultLabels(normalised))
         }
         if (loadedConfig) setConfig(loadedConfig)
+        if (loadedAudio) setAudioMessages(loadedAudio)
+        if (loadedEmails) setEmails(loadedEmails)
       } catch (e) {
         console.error("Failed to load data:", e)
       }
@@ -142,6 +254,21 @@ function App() {
   useEffect(() => {
     saveTodosFn(todos)
   }, [todos, saveTodosFn])
+
+  // Save audio messages when they change
+  useEffect(() => {
+    saveAudioMessagesFn(audioMessages)
+  }, [audioMessages, saveAudioMessagesFn])
+
+  // Save emails when they change
+  useEffect(() => {
+    saveEmailsFn(emails)
+  }, [emails, saveEmailsFn])
+
+  // Reset to Tasks tab when company changes
+  useEffect(() => {
+    setActiveTab("tasks")
+  }, [selectedCompany])
 
   // Callbacks
   const addTodo = useCallback((todoData) => {
@@ -203,6 +330,26 @@ function App() {
     }))
   }, [])
 
+  const addAudioMessage = useCallback((message) => {
+    setAudioMessages((prev) => [message, ...prev])
+  }, [])
+
+  const deleteAudioMessage = useCallback((id) => {
+    setAudioMessages((prev) => prev.filter((m) => m.id !== id))
+  }, [])
+
+  const addEmails = useCallback((newEmails) => {
+    setEmails((prev) => {
+      const merged = [...prev, ...newEmails]
+      return merged.sort((a, b) => new Date(a.date) - new Date(b.date))
+    })
+  }, [])
+
+  const deleteEmails = useCallback((ids) => {
+    const idSet = new Set(ids)
+    setEmails((prev) => prev.filter((e) => !idSet.has(e.id)))
+  }, [])
+
   const editTodo = useCallback((updatedTodo) => {
     const now = new Date().toISOString()
     const updatedWithTimestamp = {
@@ -242,10 +389,14 @@ function App() {
           stats={stats}
           tags={tags}
           onTagsChange={handleTagsChange}
+          companyTypes={tags.companyTypes || {}}
         />
 
-        {/* Main Content */}
-        <MainFeed
+        {/* Main Content with tabs */}
+        <CompanyTabs
+          selectedCompany={selectedCompany}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
           todos={todos}
           onComplete={completeTodo}
           onDelete={deleteTodo}
@@ -259,13 +410,18 @@ function App() {
           }}
           onSave={editTodo}
           onAdd={addTodo}
-          selectedCompany={selectedCompany}
           showCompleted={showCompleted}
           onShowCompletedChange={setShowCompleted}
           labels={tags.labels || []}
           companies={allCompanies}
           accountExecutives={tags.accountExecutives || []}
           companyAssignments={tags.companyAssignments || {}}
+          audioMessages={audioMessages}
+          onAddAudioMessage={addAudioMessage}
+          onDeleteAudioMessage={deleteAudioMessage}
+          emails={emails}
+          onAddEmails={addEmails}
+          onDeleteEmails={deleteEmails}
         />
 
         {/* Todo Detail Modal */}
@@ -307,6 +463,8 @@ function App() {
           setShowConfig={setShowConfig}
           tags={tags}
           onTagsChange={handleTagsChange}
+          onManualExport={handleManualExport}
+          onSelectSyncFolder={handleSelectSyncFolder}
         />
 
         {/* Floating Settings Button */}

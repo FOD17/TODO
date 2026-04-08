@@ -340,7 +340,7 @@ describe("ElectronAdapter Persistence Tests", () => {
     it("should return default config when no config is stored", async () => {
       const config = await electronAdapter.getConfig()
 
-      expect(config.theme).toBe("default")
+      expect(config.theme).toBe("github-dark")
       expect(config.sidebarPosition).toBe("left")
       expect(config.compactMode).toBe(false)
       expect(config.defaultView).toBe("company")
@@ -640,7 +640,7 @@ describe("ElectronAdapter Persistence Tests", () => {
 
       // Config should still be default since it was not in backup
       const config = await electronAdapter.getConfig()
-      expect(config.theme).toBe("default")
+      expect(config.theme).toBe("github-dark")
     })
   })
 
@@ -667,12 +667,10 @@ describe("ElectronAdapter Persistence Tests", () => {
     it("should return default config when no data exists", async () => {
       const config = await electronAdapter.getConfig()
 
-      expect(config).toEqual({
-        theme: "default",
-        sidebarPosition: "left",
-        compactMode: false,
-        defaultView: "company",
-      })
+      expect(config.theme).toBe("github-dark")
+      expect(config.sidebarPosition).toBe("left")
+      expect(config.compactMode).toBe(false)
+      expect(config.defaultView).toBe("company")
     })
 
     it("should return empty contacts when no data exists", async () => {
@@ -754,6 +752,127 @@ describe("ElectronAdapter Persistence Tests", () => {
       expect(tags.accountExecutives).toEqual([])
       expect(Array.isArray(tags.labels)).toBe(true)
       expect(tags.labels).toEqual([])
+    })
+  })
+
+  // ============ 7. Audio messages round-trip ============
+
+  describe("Audio messages round-trip", () => {
+    it("returns empty array when nothing is stored", async () => {
+      const result = await electronAdapter.getAudioMessages()
+      expect(result).toEqual([])
+    })
+
+    it("saves and loads audio messages preserving all fields", async () => {
+      const messages = [
+        {
+          id: "audio-1",
+          title: "Morning standup",
+          company: "Acme Corp",
+          dataUrl: "data:audio/webm;base64,AAAA",
+          durationSeconds: 45,
+          createdAt: "2026-04-03T09:00:00.000Z",
+        },
+        {
+          id: "audio-2",
+          title: "Follow-up",
+          company: "Globex",
+          dataUrl: "data:audio/webm;base64,BBBB",
+          durationSeconds: 120,
+          createdAt: "2026-04-02T14:00:00.000Z",
+        },
+      ]
+
+      await electronAdapter.saveAudioMessages(messages)
+      const loaded = await electronAdapter.getAudioMessages()
+
+      expect(loaded).toHaveLength(2)
+      expect(loaded[0].id).toBe("audio-1")
+      expect(loaded[0].title).toBe("Morning standup")
+      expect(loaded[0].company).toBe("Acme Corp")
+      expect(loaded[0].durationSeconds).toBe(45)
+      expect(loaded[1].id).toBe("audio-2")
+    })
+
+    it("writes to the 'audio_messages' localStorage key", async () => {
+      const messages = [{ id: "a1", title: "Test", company: "", dataUrl: "data:", durationSeconds: 10, createdAt: new Date().toISOString() }]
+      await electronAdapter.saveAudioMessages(messages)
+      const raw = localStorage.getItem("audio_messages")
+      expect(raw).not.toBeNull()
+      const parsed = JSON.parse(raw)
+      expect(parsed[0].id).toBe("a1")
+    })
+
+    it("overwrites previous audio messages on save", async () => {
+      await electronAdapter.saveAudioMessages([{ id: "old", title: "Old", company: "", dataUrl: "data:", durationSeconds: 5, createdAt: new Date().toISOString() }])
+      await electronAdapter.saveAudioMessages([{ id: "new", title: "New", company: "", dataUrl: "data:", durationSeconds: 10, createdAt: new Date().toISOString() }])
+      const loaded = await electronAdapter.getAudioMessages()
+      expect(loaded).toHaveLength(1)
+      expect(loaded[0].id).toBe("new")
+    })
+  })
+
+  // ============ 8. Emails round-trip ============
+
+  describe("Emails round-trip", () => {
+    it("returns empty array when nothing is stored", async () => {
+      const result = await electronAdapter.getEmails()
+      expect(result).toEqual([])
+    })
+
+    it("saves and loads emails preserving all fields", async () => {
+      const emailItems = [
+        {
+          id: "email-1",
+          type: "email",
+          subject: "Budget Review",
+          from: "alice@example.com",
+          date: "2026-04-06T10:00:00.000Z",
+          body: "Please review the budget.",
+          location: "",
+          company: "Acme Corp",
+          fileName: "budget.eml",
+        },
+        {
+          id: "email-2",
+          type: "calendar",
+          subject: "Team Standup",
+          from: "Bob Smith",
+          date: "2026-04-07T09:00:00.000Z",
+          body: "Daily sync",
+          location: "Conference Room A",
+          company: "Acme Corp",
+          fileName: "standup.ics",
+        },
+      ]
+
+      await electronAdapter.saveEmails(emailItems)
+      const loaded = await electronAdapter.getEmails()
+
+      expect(loaded).toHaveLength(2)
+      expect(loaded[0].id).toBe("email-1")
+      expect(loaded[0].type).toBe("email")
+      expect(loaded[0].subject).toBe("Budget Review")
+      expect(loaded[0].from).toBe("alice@example.com")
+      expect(loaded[1].type).toBe("calendar")
+      expect(loaded[1].location).toBe("Conference Room A")
+    })
+
+    it("writes to the 'email_files' localStorage key", async () => {
+      const items = [{ id: "e1", type: "email", subject: "Test", from: "", date: new Date().toISOString(), body: "", location: "", company: "", fileName: "test.eml" }]
+      await electronAdapter.saveEmails(items)
+      const raw = localStorage.getItem("email_files")
+      expect(raw).not.toBeNull()
+      const parsed = JSON.parse(raw)
+      expect(parsed[0].id).toBe("e1")
+    })
+
+    it("overwrites previous emails on save", async () => {
+      await electronAdapter.saveEmails([{ id: "old-e", type: "email", subject: "Old", from: "", date: new Date().toISOString(), body: "", location: "", company: "", fileName: "old.eml" }])
+      await electronAdapter.saveEmails([{ id: "new-e", type: "email", subject: "New", from: "", date: new Date().toISOString(), body: "", location: "", company: "", fileName: "new.eml" }])
+      const loaded = await electronAdapter.getEmails()
+      expect(loaded).toHaveLength(1)
+      expect(loaded[0].id).toBe("new-e")
     })
   })
 })

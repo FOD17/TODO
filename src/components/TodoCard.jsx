@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 
 function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompleted, labels = [] }) {
   const [isHovered, setIsHovered] = useState(false)
@@ -6,7 +6,9 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
   const [showAddForm, setShowAddForm] = useState(false)
   const [addType, setAddType] = useState("subtask")
   const [addText, setAddText] = useState("")
+  const [tooltipLabel, setTooltipLabel] = useState(null)
   const addInputRef = useRef(null)
+  const tooltipRef = useRef(null)
 
   const subtasks = todo.subtasks || []
   const notes = todo.notes || []
@@ -126,6 +128,22 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
 
   const completedSubtasks = subtasks.filter((s) => s.completed).length
 
+  // Close tooltip when clicking anywhere outside
+  useEffect(() => {
+    if (!tooltipLabel) return
+    const close = (e) => {
+      if (!tooltipRef.current?.closest(".card-labels")?.contains(e.target)) {
+        setTooltipLabel(null)
+      }
+    }
+    document.addEventListener("mousedown", close)
+    document.addEventListener("focusin", close)
+    return () => {
+      document.removeEventListener("mousedown", close)
+      document.removeEventListener("focusin", close)
+    }
+  }, [tooltipLabel])
+
   return (
     <div
       className={`todo-card ${isCompleted ? "completed" : ""}`}
@@ -161,20 +179,48 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
 
         {/* Label pills */}
         {todo.labels?.length > 0 && (
-          <div className="card-labels">
+          <div className="card-labels" role="list" aria-label="Labels">
             {todo.labels.map((labelName) => {
               const def = labels.find((l) => l.name === labelName)
+              const hasDesc = def?.description
               return (
                 <span
                   key={labelName}
-                  className="card-label-pill"
+                  role="listitem"
+                  className={`card-label-pill ${hasDesc ? "has-desc" : ""}`}
                   style={{
                     background: def ? `${def.color}22` : "rgba(52,152,219,0.12)",
                     color: def ? def.color : "#3498db",
                     border: `1px solid ${def ? `${def.color}44` : "rgba(52,152,219,0.25)"}`,
                   }}
+                  tabIndex={hasDesc ? 0 : undefined}
+                  aria-label={hasDesc ? `${labelName}: ${def.description}` : labelName}
+                  onClick={(e) => {
+                    if (!hasDesc) return
+                    e.stopPropagation()
+                    setTooltipLabel(tooltipLabel === labelName ? null : labelName)
+                  }}
+                  onKeyDown={(e) => {
+                    if (!hasDesc) return
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setTooltipLabel(tooltipLabel === labelName ? null : labelName)
+                    }
+                  }}
                 >
                   {labelName}
+                  {hasDesc && <span className="pill-info-dot" aria-hidden="true">·</span>}
+                  {hasDesc && tooltipLabel === labelName && (
+                    <span
+                      ref={tooltipRef}
+                      className="label-tooltip"
+                      role="tooltip"
+                      aria-live="polite"
+                    >
+                      {def.description}
+                    </span>
+                  )}
                 </span>
               )
             })}
@@ -437,10 +483,68 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
         .card-label-pill {
           display: inline-flex;
           align-items: center;
+          gap: 3px;
           padding: 2px 8px;
           border-radius: 10px;
           font-size: 11px;
           font-weight: 600;
+          position: relative;
+        }
+
+        .card-label-pill.has-desc {
+          cursor: pointer;
+        }
+
+        .card-label-pill.has-desc:hover {
+          filter: brightness(1.1);
+        }
+
+        .card-label-pill:focus-visible {
+          outline: 2px solid currentColor;
+          outline-offset: 2px;
+        }
+
+        .pill-info-dot {
+          font-size: 14px;
+          line-height: 1;
+          opacity: 0.7;
+        }
+
+        .label-tooltip {
+          position: absolute;
+          bottom: calc(100% + 8px);
+          left: 50%;
+          transform: translateX(-50%);
+          background: var(--text);
+          color: var(--card);
+          font-size: 12px;
+          font-weight: 400;
+          line-height: 1.4;
+          padding: 6px 10px;
+          border-radius: 6px;
+          white-space: normal;
+          width: max-content;
+          max-width: 220px;
+          text-align: center;
+          z-index: 200;
+          pointer-events: none;
+          animation: tooltipIn 0.12s ease;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .label-tooltip::after {
+          content: "";
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          border: 5px solid transparent;
+          border-top-color: var(--text);
+        }
+
+        @keyframes tooltipIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
 
         .card-meta {

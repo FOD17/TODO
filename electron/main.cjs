@@ -1,14 +1,20 @@
 const { app, BrowserWindow, ipcMain, Menu } = require("electron")
 const path = require("path")
 const isDev = require("electron-is-dev")
-const Database = require("./database")
+const Database = require("./database.cjs")
 
 let mainWindow
 let database
 
-// Initialize database with app data directory
-const dataDir = path.join(app.getPath("userData"), "data")
-database = new Database(dataDir)
+// Initialize database with PostgreSQL connection string
+const initDatabase = async () => {
+  const connectionString =
+    process.env.DATABASE_URL || "postgresql://localhost:5432/todo_tracker"
+  database = new Database(connectionString)
+  await database.connect()
+}
+
+initDatabase().catch(console.error)
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -17,7 +23,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       enableRemoteModule: false,
     },
@@ -193,4 +199,9 @@ ipcMain.handle("db:getStatus", async () => {
     appPath: app.getAppPath(),
     userDataPath: app.getPath("userData"),
   }
+})
+
+// IPC Handler for Health Check (used by SyncManager polling)
+ipcMain.handle("db:ping", async () => {
+  return database.ping()
 })
