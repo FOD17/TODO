@@ -126,7 +126,7 @@ export const parseLabel = (labelName) => {
 
 export const groupLabelsByTag = (labels) => {
   const groups = {}
-  labels.forEach((label) => {
+  labels.filter(Boolean).forEach((label) => {
     const { tag } = parseLabel(label.name)
     if (!groups[tag]) groups[tag] = []
     groups[tag].push(label)

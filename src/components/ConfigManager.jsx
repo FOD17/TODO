@@ -233,7 +233,8 @@ function ConfigManager({
     try {
       onManualExport(format)
       setExportStatus(`Exported as ${format.toUpperCase()}`)
-    } catch {
+    } catch (err) {
+      console.error("[ConfigManager] Manual export failed:", err)
       setExportStatus("Export failed")
     }
     setTimeout(() => setExportStatus(""), 3000)
@@ -358,6 +359,42 @@ function ConfigManager({
               </section>
 
               <section className="config-section">
+                <h3>Text Size</h3>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[
+                    { value: "small", label: "Small", px: "13px" },
+                    { value: "normal", label: "Normal", px: "14px" },
+                    { value: "large", label: "Large", px: "17px" },
+                    { value: "xlarge", label: "X-Large", px: "20px" },
+                  ].map(({ value, label, px }) => {
+                    const active = (config.fontSize || "normal") === value
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => handleConfigChange("fontSize", value)}
+                        style={{
+                          padding: "8px 18px",
+                          borderRadius: 8,
+                          border: active ? "2px solid var(--primary)" : "2px solid var(--border)",
+                          background: active ? "var(--primary)" : "var(--card)",
+                          color: active ? "#fff" : "var(--text)",
+                          fontSize: px,
+                          cursor: "pointer",
+                          fontWeight: active ? 600 : 400,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <span className="help-text" style={{ marginTop: 8, display: "block" }}>
+                  Scales all text across the app. Takes effect immediately.
+                </span>
+              </section>
+
+              <section className="config-section">
                 <h3>Layout Options</h3>
                 <div className="config-option">
                   <label htmlFor="compact-mode-toggle">
@@ -369,7 +406,7 @@ function ConfigManager({
                     />
                     Compact Mode
                   </label>
-                  <span className="help-text">Reduce spacing and font sizes</span>
+                  <span className="help-text">Reduce spacing between items</span>
                 </div>
               </section>
             </>

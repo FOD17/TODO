@@ -45,6 +45,11 @@ function AudioTab({ company, audioMessages, onAddAudioMessage, onDeleteAudioMess
 
         const reader = new FileReader()
         reader.onloadend = () => {
+          if (reader.error) {
+            console.error("[AudioTab] FileReader failed to encode recording:", reader.error)
+            setError("Failed to encode recording.")
+            return
+          }
           const message = {
             id: Date.now().toString(),
             title: title.trim() || `Recording ${new Date().toLocaleDateString()}`,
@@ -56,6 +61,10 @@ function AudioTab({ company, audioMessages, onAddAudioMessage, onDeleteAudioMess
           onAddAudioMessage(message)
           setTitle("")
           setRecordingTime(0)
+        }
+        reader.onerror = () => {
+          console.error("[AudioTab] FileReader error encoding recording blob")
+          setError("Failed to save recording.")
         }
         reader.readAsDataURL(blob)
       }
@@ -95,7 +104,7 @@ function AudioTab({ company, audioMessages, onAddAudioMessage, onDeleteAudioMess
 
     const el = audioEls.current[id]
     if (el) {
-      el.play().catch((e) => console.warn("Audio play failed:", e))
+      el.play().catch((e) => console.warn(`[AudioTab] Audio play failed for id=${id}:`, e.message))
       setPlayingId(id)
       el.onended = () => setPlayingId(null)
     }

@@ -124,7 +124,7 @@ function CompanyTabs({
           border: none;
           border-bottom: 2px solid transparent;
           padding: 8px 18px 10px;
-          font-size: 14px;
+          font-size: calc(14px * var(--font-scale, 1));
           font-weight: 500;
           cursor: pointer;
           color: var(--text-muted);
@@ -189,7 +189,7 @@ function CompanyTabs({
 
           .tab-btn {
             padding: 6px 12px 8px;
-            font-size: 13px;
+            font-size: calc(13px * var(--font-scale, 1));
           }
 
           .tab-inner {

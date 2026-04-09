@@ -7,6 +7,7 @@ function Sidebar({
   stats,
   tags,
   onTagsChange,
+  onReassignTodos,
   companyTypes = {},
 }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -15,7 +16,7 @@ function Sidebar({
   const [draggedCompany, setDraggedCompany] = useState(null)
   const [dragOverTarget, setDragOverTarget] = useState(null)
 
-  const accountExecutives = tags.accountExecutives || []
+  const accountExecutives = (tags.accountExecutives || []).filter(Boolean)
   const companyAssignments = tags.companyAssignments || {}
 
   // Group companies by AE
@@ -37,12 +38,22 @@ function Sidebar({
 
   const handleAssign = (company, aeId) => {
     const newAssignments = { ...(tags.companyAssignments || {}) }
+    const previousAeId = newAssignments[company]
+
     if (aeId === null) {
       delete newAssignments[company]
     } else {
       newAssignments[company] = aeId
     }
+
     onTagsChange({ ...tags, companyAssignments: newAssignments })
+
+    // If the AE actually changed, bulk-update accountRep on all todos for this company
+    if (aeId !== previousAeId && onReassignTodos) {
+      const ae = aeId ? (tags.accountExecutives || []).find((a) => a.id === aeId) : null
+      onReassignTodos(company, ae ? ae.name : "")
+    }
+
     setAssignDropdown(null)
   }
 
@@ -374,7 +385,7 @@ function Sidebar({
 
         .sidebar-header h2 {
           margin: 0;
-          font-size: 20px;
+          font-size: calc(20px * var(--font-scale, 1));
           color: var(--text);
           font-weight: 700;
           white-space: nowrap;
@@ -387,7 +398,7 @@ function Sidebar({
           border-radius: 6px;
           cursor: pointer;
           color: var(--text-muted);
-          font-size: 16px;
+          font-size: calc(16px * var(--font-scale, 1));
           font-weight: 700;
           width: 28px;
           height: 28px;
@@ -438,7 +449,7 @@ function Sidebar({
           border-radius: 8px;
           cursor: pointer;
           color: var(--text);
-          font-size: 14px;
+          font-size: calc(14px * var(--font-scale, 1));
           font-weight: 500;
           transition: all 0.15s;
           margin-bottom: 2px;
@@ -489,7 +500,7 @@ function Sidebar({
         .type-indicator.company { background: #3498db; }
 
         .nav-icon {
-          font-size: 18px;
+          font-size: calc(18px * var(--font-scale, 1));
           flex-shrink: 0;
         }
 
@@ -505,7 +516,7 @@ function Sidebar({
         .badge {
           background: var(--background);
           color: var(--text);
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           font-weight: 700;
           padding: 2px 8px;
           border-radius: 10px;
@@ -520,7 +531,7 @@ function Sidebar({
         }
 
         .badge-collapsed {
-          font-size: 10px;
+          font-size: calc(10px * var(--font-scale, 1));
           font-weight: 700;
           color: var(--text-muted);
           line-height: 1;
@@ -624,7 +635,7 @@ function Sidebar({
           border: none;
           cursor: pointer;
           color: var(--text-muted);
-          font-size: 16px;
+          font-size: calc(16px * var(--font-scale, 1));
           padding: 2px 4px;
           border-radius: 4px;
           opacity: 0;
@@ -669,7 +680,7 @@ function Sidebar({
 
         .assign-menu-title {
           padding: 6px 12px 4px;
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           font-weight: 600;
           color: var(--text-muted);
           text-transform: uppercase;
@@ -680,7 +691,7 @@ function Sidebar({
           padding: 8px 12px;
           cursor: pointer;
           border-radius: 6px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           color: var(--text);
           transition: background 0.1s;
         }
@@ -716,7 +727,7 @@ function Sidebar({
           border-radius: 8px;
           cursor: pointer;
           color: var(--text);
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           font-weight: 600;
           transition: all 0.15s;
         }
@@ -741,17 +752,17 @@ function Sidebar({
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           font-weight: 700;
           flex-shrink: 0;
         }
 
         .ae-badge {
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
         }
 
         .chevron {
-          font-size: 18px;
+          font-size: calc(18px * var(--font-scale, 1));
           font-weight: 700;
           transition: transform 0.2s;
           color: var(--text-muted);
@@ -765,14 +776,14 @@ function Sidebar({
 
         .empty-group {
           padding: 6px 16px 8px 22px;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           color: var(--text-muted);
           font-style: italic;
         }
 
         .section-label {
           padding: 8px 12px 4px;
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           font-weight: 600;
           color: var(--text-muted);
           text-transform: uppercase;
@@ -801,7 +812,7 @@ function Sidebar({
 
         .drop-zone-label {
           padding: 10px 12px;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           color: var(--text-muted);
           text-align: center;
           border: 1px dashed var(--border);
@@ -843,24 +854,24 @@ function Sidebar({
         }
 
         .stat-label {
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           color: var(--text-muted);
           font-weight: 600;
           text-transform: uppercase;
         }
 
         .stats-collapsed .stat-label {
-          font-size: 9px;
+          font-size: calc(9px * var(--font-scale, 1));
         }
 
         .stat-value {
-          font-size: 24px;
+          font-size: calc(24px * var(--font-scale, 1));
           font-weight: 700;
           color: var(--primary);
         }
 
         .stats-collapsed .stat-value {
-          font-size: 18px;
+          font-size: calc(18px * var(--font-scale, 1));
         }
 
         .stat-value.urgent {

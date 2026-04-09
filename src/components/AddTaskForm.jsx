@@ -53,7 +53,7 @@ function AddTaskForm({
     setLabelSearch("")
   }
 
-  const filteredLabels = labels.filter(
+  const filteredLabels = labels.filter(Boolean).filter(
     (l) =>
       l.name.toLowerCase().includes(labelSearch.toLowerCase()) &&
       !selectedLabels.includes(l.name),
@@ -336,14 +336,14 @@ function AddTaskForm({
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 18px;
+          font-size: calc(18px * var(--font-scale, 1));
           font-weight: 600;
           flex-shrink: 0;
         }
 
         .add-task-placeholder {
           color: var(--text-muted);
-          font-size: 14px;
+          font-size: calc(14px * var(--font-scale, 1));
         }
 
         .add-task-expanded {
@@ -368,7 +368,7 @@ function AddTaskForm({
           padding: 8px 10px;
           border: 1px solid var(--border);
           border-radius: 6px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           color: var(--text);
           background: var(--background);
           font-family: inherit;
@@ -386,7 +386,7 @@ function AddTaskForm({
         }
 
         .atf-message {
-          font-size: 15px;
+          font-size: calc(15px * var(--font-scale, 1));
           font-weight: 500;
           padding: 10px 12px;
         }
@@ -405,7 +405,7 @@ function AddTaskForm({
         }
 
         .atf-label {
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           font-weight: 700;
           color: var(--text-muted);
           text-transform: uppercase;
@@ -435,7 +435,7 @@ function AddTaskForm({
           gap: 4px;
           padding: 3px 8px;
           border-radius: 10px;
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           font-weight: 600;
         }
 
@@ -444,7 +444,7 @@ function AddTaskForm({
           border: none;
           cursor: pointer;
           color: inherit;
-          font-size: 9px;
+          font-size: calc(9px * var(--font-scale, 1));
           padding: 0 0 0 3px;
           opacity: 0.7;
         }
@@ -464,7 +464,7 @@ function AddTaskForm({
           padding: 4px 8px;
           border: 1px solid var(--border);
           border-radius: 6px;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           color: var(--text);
           background: var(--background);
           font-family: inherit;
@@ -498,7 +498,7 @@ function AddTaskForm({
 
         .atf-label-option {
           padding: 6px 10px;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           color: var(--text);
           cursor: pointer;
           display: flex;
@@ -532,7 +532,7 @@ function AddTaskForm({
           padding: 2px 8px;
           border: 1px solid var(--border);
           border-radius: 10px;
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           background: transparent;
           cursor: pointer;
           transition: all 0.15s;
@@ -557,7 +557,7 @@ function AddTaskForm({
           padding: 8px 16px;
           border: none;
           border-radius: 6px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           font-weight: 600;
           cursor: pointer;
           transition: all 0.15s;

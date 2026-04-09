@@ -1,12 +1,12 @@
 /**
  * electronAdapter.sync.test.js
  *
- * Tests for the SQLite ↔ localStorage sync layer in ElectronAdapter.
+ * Tests for the PostgreSQL ↔ localStorage sync layer in ElectronAdapter.
  * Covers:
- *  - Write-through: every SQLite write also updates localStorage
- *  - Fallback: when SQLite throws, the adapter uses localStorage
+ *  - Write-through: every PostgreSQL write also updates localStorage
+ *  - Fallback: when PostgreSQL throws, the adapter uses localStorage
  *  - Dirty marking: failed/skipped writes mark the collection dirty
- *  - Sync-on-reconnect: on 'online' event, dirty collections are pushed to SQLite
+ *  - Sync-on-reconnect: on 'online' event, dirty collections are pushed to PostgreSQL
  *  - Edge cases and failure scenarios
  */
 
@@ -37,7 +37,7 @@ function makeElectron(overrides = {}) {
     ping: vi.fn().mockResolvedValue({ ok: true }),
     getTodos: vi.fn().mockResolvedValue(EMPTY_TODOS),
     saveTodos: vi.fn().mockImplementation(async (d) => d),
-    addTodo: vi.fn().mockImplementation(async (d) => ({ id: "sqlite-id", ...d, completed: 0 })),
+    addTodo: vi.fn().mockImplementation(async (d) => ({ id: "postgres-id", ...d, completed: 0 })),
     updateTodo: vi.fn().mockImplementation(async (id, u) => ({ id, ...u })),
     deleteTodo: vi.fn().mockResolvedValue(undefined),
     completeTodo: vi.fn().mockResolvedValue(undefined),
@@ -65,7 +65,7 @@ function makeElectron(overrides = {}) {
       exportedAt: new Date().toISOString(),
     }),
     importBackup: vi.fn().mockResolvedValue({ status: "success" }),
-    getStatus: vi.fn().mockResolvedValue({ ready: true, database: "SQLite" }),
+    getStatus: vi.fn().mockResolvedValue({ ready: true, database: "PostgreSQL" }),
   }
   return { ...defaults, ...overrides }
 }
@@ -127,7 +127,7 @@ describe("ElectronAdapter — localStorage-only mode (no Electron)", () => {
     expect(JSON.parse(localStorage.getItem("todos"))).toEqual(data)
   })
 
-  it("saveTodos marks 'todos' dirty (no SQLite to clear it)", async () => {
+  it("saveTodos marks 'todos' dirty (no PostgreSQL to clear it)", async () => {
     const { sm, adapter } = await makeAll(null)
     await adapter.saveTodos({ active: [], completed: [] })
     expect(sm.isDirty("todos")).toBe(true)
@@ -198,7 +198,7 @@ describe("ElectronAdapter — localStorage-only mode (no Electron)", () => {
     expect(stored.completed).toHaveLength(0)
   })
 
-  it("exportBackup builds from localStorage when SQLite unavailable", async () => {
+  it("exportBackup builds from localStorage when PostgreSQL unavailable", async () => {
     const { adapter } = await makeAll(null)
     await adapter.saveTodos({ active: [{ id: "1", message: "thing" }], completed: [] })
     const backup = await adapter.exportBackup()
@@ -219,9 +219,9 @@ describe("ElectronAdapter — localStorage-only mode (no Electron)", () => {
   })
 })
 
-// ─── SQLite mode — write-through ──────────────────────────────────────────────
+// ─── PostgreSQL mode — write-through ──────────────────────────────────────────────
 
-describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () => {
+describe("ElectronAdapter — PostgreSQL mode (write-through to localStorage)", () => {
   it("saveTodos calls window.electron.saveTodos", async () => {
     const el = makeElectron()
     const { adapter } = await makeAll(el)
@@ -238,7 +238,7 @@ describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () =
     expect(JSON.parse(localStorage.getItem("todos"))).toEqual(data)
   })
 
-  it("saveTodos clears the 'todos' dirty flag after successful SQLite write", async () => {
+  it("saveTodos clears the 'todos' dirty flag after successful PostgreSQL write", async () => {
     const el = makeElectron()
     const { sm, adapter } = await makeAll(el)
     sm.markDirty("todos")
@@ -264,16 +264,16 @@ describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () =
     expect(JSON.parse(localStorage.getItem("config")).theme).toBe("ocean")
   })
 
-  it("getTodos reads from SQLite when available", async () => {
-    const sqliteTodos = { active: [{ id: "s1", message: "from sqlite" }], completed: [] }
+  it("getTodos reads from PostgreSQL when available", async () => {
+    const sqliteTodos = { active: [{ id: "s1", message: "from postgres" }], completed: [] }
     const el = makeElectron({ getTodos: vi.fn().mockResolvedValue(sqliteTodos) })
     const { adapter } = await makeAll(el)
     const result = await adapter.getTodos()
-    expect(result.active[0].message).toBe("from sqlite")
+    expect(result.active[0].message).toBe("from postgres")
     expect(el.getTodos).toHaveBeenCalled()
   })
 
-  it("addTodo calls SQLite and mirrors result to localStorage", async () => {
+  it("addTodo calls PostgreSQL and mirrors result to localStorage", async () => {
     const el = makeElectron()
     const { adapter } = await makeAll(el)
     localStorage.setItem("todos", JSON.stringify(EMPTY_TODOS))
@@ -284,7 +284,7 @@ describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () =
     expect(stored.active.find((t) => t.id === result.id)).toBeDefined()
   })
 
-  it("deleteTodo calls SQLite and mirrors deletion to localStorage", async () => {
+  it("deleteTodo calls PostgreSQL and mirrors deletion to localStorage", async () => {
     const el = makeElectron()
     const { adapter } = await makeAll(el)
     localStorage.setItem("todos", JSON.stringify({
@@ -297,7 +297,7 @@ describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () =
     expect(stored.active.find((t) => t.id === "del-1")).toBeUndefined()
   })
 
-  it("completeTodo calls SQLite and mirrors status change to localStorage", async () => {
+  it("completeTodo calls PostgreSQL and mirrors status change to localStorage", async () => {
     const el = makeElectron()
     const { adapter } = await makeAll(el)
     localStorage.setItem("todos", JSON.stringify({
@@ -311,7 +311,7 @@ describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () =
     expect(stored.completed.find((t) => t.id === "c1")).toBeDefined()
   })
 
-  it("uncompleteTodo calls SQLite and mirrors to localStorage", async () => {
+  it("uncompleteTodo calls PostgreSQL and mirrors to localStorage", async () => {
     const el = makeElectron()
     const { adapter } = await makeAll(el)
     localStorage.setItem("todos", JSON.stringify({
@@ -326,10 +326,10 @@ describe("ElectronAdapter — SQLite mode (write-through to localStorage)", () =
   })
 })
 
-// ─── SQLite failure → fallback + dirty marking ────────────────────────────────
+// ─── PostgreSQL failure → fallback + dirty marking ────────────────────────────────
 
-describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
-  it("saveTodos falls back to localStorage when SQLite throws", async () => {
+describe("ElectronAdapter — PostgreSQL failure → localStorage fallback", () => {
+  it("saveTodos falls back to localStorage when PostgreSQL throws", async () => {
     const el = makeElectron({ saveTodos: vi.fn().mockRejectedValue(new Error("IPC error")) })
     const { adapter } = await makeAll(el)
     const data = { active: [{ id: "fb-1", message: "fallback" }], completed: [] }
@@ -338,21 +338,21 @@ describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
     expect(JSON.parse(localStorage.getItem("todos"))).toEqual(data)
   })
 
-  it("saveTodos marks 'todos' dirty when SQLite throws", async () => {
+  it("saveTodos marks 'todos' dirty when PostgreSQL throws", async () => {
     const el = makeElectron({ saveTodos: vi.fn().mockRejectedValue(new Error("down")) })
     const { sm, adapter } = await makeAll(el)
     await adapter.saveTodos({ active: [], completed: [] })
     expect(sm.isDirty("todos")).toBe(true)
   })
 
-  it("saveTags falls back and marks 'tags' dirty when SQLite throws", async () => {
+  it("saveTags falls back and marks 'tags' dirty when PostgreSQL throws", async () => {
     const el = makeElectron({ saveTags: vi.fn().mockRejectedValue(new Error("err")) })
     const { sm, adapter } = await makeAll(el)
     await adapter.saveTags({ companies: ["FailCo"], accountExecutives: [], companyAssignments: {}, labels: [] })
     expect(sm.isDirty("tags")).toBe(true)
   })
 
-  it("updateConfig falls back and marks 'config' dirty when SQLite throws", async () => {
+  it("updateConfig falls back and marks 'config' dirty when PostgreSQL throws", async () => {
     const el = makeElectron({ updateConfig: vi.fn().mockRejectedValue(new Error("err")) })
     const { sm, adapter } = await makeAll(el)
     await adapter.updateConfig({ theme: "nord" })
@@ -360,7 +360,7 @@ describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
     expect(JSON.parse(localStorage.getItem("config")).theme).toBe("nord")
   })
 
-  it("getTodos falls back to localStorage when SQLite throws", async () => {
+  it("getTodos falls back to localStorage when PostgreSQL throws", async () => {
     const localData = { active: [{ id: "local-1", message: "local todo" }], completed: [] }
     localStorage.setItem("todos", JSON.stringify(localData))
     const el = makeElectron({ getTodos: vi.fn().mockRejectedValue(new Error("IPC dead")) })
@@ -369,7 +369,7 @@ describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
     expect(result.active[0].message).toBe("local todo")
   })
 
-  it("getTags falls back to localStorage when SQLite throws", async () => {
+  it("getTags falls back to localStorage when PostgreSQL throws", async () => {
     localStorage.setItem("tags.md", JSON.stringify({
       companies: ["LocalCo"],
       accountExecutives: [],
@@ -382,7 +382,7 @@ describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
     expect(result.companies).toEqual(["LocalCo"])
   })
 
-  it("getConfig falls back to defaults when SQLite throws and localStorage is empty", async () => {
+  it("getConfig falls back to defaults when PostgreSQL throws and localStorage is empty", async () => {
     const el = makeElectron({ getConfig: vi.fn().mockRejectedValue(new Error("err")) })
     const { adapter } = await makeAll(el)
     const cfg = await adapter.getConfig()
@@ -400,7 +400,7 @@ describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
     expect(sm.isDirty("todos")).toBe(true)
   })
 
-  it("deleteTodo falls back and marks dirty when SQLite throws", async () => {
+  it("deleteTodo falls back and marks dirty when PostgreSQL throws", async () => {
     localStorage.setItem("todos", JSON.stringify({
       active: [{ id: "d1", message: "gone" }],
       completed: [],
@@ -417,7 +417,7 @@ describe("ElectronAdapter — SQLite failure → localStorage fallback", () => {
 // ─── Sync-on-reconnect ────────────────────────────────────────────────────────
 
 describe("ElectronAdapter — sync-on-reconnect", () => {
-  it("pushes dirty 'todos' to SQLite when syncManager fires 'online'", async () => {
+  it("pushes dirty 'todos' to PostgreSQL when syncManager fires 'online'", async () => {
     const data = { active: [{ id: "sync-1", message: "sync me" }], completed: [] }
     localStorage.setItem("todos", JSON.stringify(data))
 
@@ -433,7 +433,7 @@ describe("ElectronAdapter — sync-on-reconnect", () => {
     expect(sm.isDirty("todos")).toBe(false)
   })
 
-  it("pushes dirty 'tags' to SQLite on reconnect", async () => {
+  it("pushes dirty 'tags' to PostgreSQL on reconnect", async () => {
     const tagsData = { companies: ["SyncCo"], accountExecutives: [], companyAssignments: {}, labels: [] }
     localStorage.setItem("tags.md", JSON.stringify(tagsData))
 
@@ -449,7 +449,7 @@ describe("ElectronAdapter — sync-on-reconnect", () => {
     expect(sm.isDirty("tags")).toBe(false)
   })
 
-  it("pushes dirty 'contacts' to SQLite on reconnect", async () => {
+  it("pushes dirty 'contacts' to PostgreSQL on reconnect", async () => {
     const contacts = { Acme: { Alice: [{ id: "c1", name: "Alice" }] } }
     localStorage.setItem("contacts", JSON.stringify(contacts))
 
@@ -465,7 +465,7 @@ describe("ElectronAdapter — sync-on-reconnect", () => {
     expect(sm.isDirty("contacts")).toBe(false)
   })
 
-  it("pushes dirty 'config' to SQLite on reconnect", async () => {
+  it("pushes dirty 'config' to PostgreSQL on reconnect", async () => {
     const cfg = { theme: "dracula", sidebarPosition: "right" }
     localStorage.setItem("config", JSON.stringify(cfg))
 
@@ -534,7 +534,7 @@ describe("ElectronAdapter — sync-on-reconnect", () => {
     expect(saveContacts).not.toHaveBeenCalled()
   })
 
-  it("does nothing when SQLite reconnects with no dirty collections", async () => {
+  it("does nothing when PostgreSQL reconnects with no dirty collections", async () => {
     const saveTodos = vi.fn()
     const el = makeElectron({ saveTodos })
     const { sm, adapter: _adapter } = await makeAll(el)
@@ -559,7 +559,7 @@ describe("ElectronAdapter — getStatus()", () => {
     expect(status.sync.dirty).toContain("todos")
   })
 
-  it("returns localStorage-based status when SQLite is unavailable", async () => {
+  it("returns localStorage-based status when PostgreSQL is unavailable", async () => {
     const el = makeElectron({ getStatus: vi.fn().mockRejectedValue(new Error("down")) })
     const { adapter } = await makeAll(el)
     const status = await adapter.getStatus()

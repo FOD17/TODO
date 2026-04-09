@@ -31,8 +31,9 @@ export function getDefaultConfig() {
 export function loadConfigLocalStorageSync() {
   try {
     const config = localStorage.getItem(CONFIG_FILENAME)
-    return config ? JSON.parse(config) : getDefaultConfig()
-  } catch {
+    return config ? { ...getDefaultConfig(), ...JSON.parse(config) } : getDefaultConfig()
+  } catch (err) {
+    console.warn("[markdownHandler] Failed to load config from localStorage, using defaults:", err.message)
     return getDefaultConfig()
   }
 }
@@ -41,14 +42,19 @@ export function loadConfigLocalStorageSync() {
 export async function loadConfigLocalStorage() {
   try {
     const config = await persistence.load(CONFIG_FILENAME)
-    return config ? config : getDefaultConfig()
-  } catch {
+    return config ? { ...getDefaultConfig(), ...config } : getDefaultConfig()
+  } catch (err) {
+    console.warn("[markdownHandler] Failed to load config from IndexedDB, using defaults:", err.message)
     return getDefaultConfig()
   }
 }
 
 export async function saveConfigLocalStorage(config) {
-  await persistence.save(CONFIG_FILENAME, config)
+  try {
+    await persistence.save(CONFIG_FILENAME, config)
+  } catch (err) {
+    console.error("[markdownHandler] Failed to save config:", err)
+  }
   return true
 }
 
@@ -275,7 +281,8 @@ export function loadTagsLocalStorageSync() {
   if (!content) return {}
   try {
     return JSON.parse(content)
-  } catch {
+  } catch (err) {
+    console.warn("[markdownHandler] Tags not valid JSON, falling back to markdown parser:", err.message)
     return parseTagsFile(content)
   }
 }
@@ -316,7 +323,8 @@ export function downloadMarkdownFile(filename, content) {
 export function parseContactsFile(content) {
   try {
     return content ? JSON.parse(content) : getDefaultContacts()
-  } catch {
+  } catch (err) {
+    console.warn("[markdownHandler] Failed to parse contacts file, using empty contacts:", err.message)
     return getDefaultContacts()
   }
 }

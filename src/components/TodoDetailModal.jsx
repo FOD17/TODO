@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useRef } from "react"
 
-function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
+const todayStr = () => new Date().toISOString().slice(0, 10)
+
+const EMPTY_SUBTASK_FORM = () => ({
+  message: "", date: todayStr(), company: "", accountRep: "", description: "", labels: [],
+})
+
+function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [], companies = [], accountExecutives = [] }) {
   const [editedTodo, setEditedTodo] = useState(null)
   const [newNote, setNewNote] = useState("")
   const [newPerson, setNewPerson] = useState("")
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [editingNoteText, setEditingNoteText] = useState("")
   const [showLabelPicker, setShowLabelPicker] = useState(false)
-  const [newSubtask, setNewSubtask] = useState("")
+  // Subtask form state
+  const [showSubtaskForm, setShowSubtaskForm] = useState(false)
   const [editingSubtaskId, setEditingSubtaskId] = useState(null)
-  const [editingSubtaskText, setEditingSubtaskText] = useState("")
+  const [subtaskForm, setSubtaskForm] = useState(EMPTY_SUBTASK_FORM())
+  const [showSubtaskLabelPicker, setShowSubtaskLabelPicker] = useState(false)
   const noteInputRef = useRef(null)
 
   useEffect(() => {
@@ -23,9 +31,11 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
       })
       setNewNote("")
       setNewPerson("")
-      setNewSubtask("")
-      setEditingNoteId(null)
+      setShowSubtaskForm(false)
       setEditingSubtaskId(null)
+      setSubtaskForm(EMPTY_SUBTASK_FORM())
+      setShowSubtaskLabelPicker(false)
+      setEditingNoteId(null)
       setShowLabelPicker(false)
     }
   }, [todo, isOpen])
@@ -107,21 +117,82 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
   }
 
   // Subtask handlers
-  const handleAddSubtask = () => {
-    if (!newSubtask.trim()) return
-    const subtask = {
-      id: Date.now().toString(),
-      message: newSubtask.trim(),
-      completed: false,
-      completedAt: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const openAddSubtaskForm = () => {
+    setEditingSubtaskId(null)
+    setSubtaskForm({
+      ...EMPTY_SUBTASK_FORM(),
+      company: editedTodo.company || "",
+      accountRep: editedTodo.accountRep || "",
+    })
+    setShowSubtaskLabelPicker(false)
+    setShowSubtaskForm(true)
+  }
+
+  const openEditSubtaskForm = (subtaskId) => {
+    const st = editedTodo.subtasks.find((s) => s.id === subtaskId)
+    if (!st) return
+    setSubtaskForm({
+      message: st.message || "",
+      date: st.date || todayStr(),
+      company: st.company || "",
+      accountRep: st.accountRep || "",
+      description: st.description || "",
+      labels: st.labels || [],
+    })
+    setShowSubtaskLabelPicker(false)
+    setEditingSubtaskId(subtaskId)
+    setShowSubtaskForm(true)
+  }
+
+  const handleSubtaskFormChange = (field, value) => {
+    setSubtaskForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleToggleSubtaskLabel = (labelName) => {
+    setSubtaskForm((prev) => {
+      const has = prev.labels.includes(labelName)
+      return { ...prev, labels: has ? prev.labels.filter((l) => l !== labelName) : [...prev.labels, labelName] }
+    })
+  }
+
+  const handleSubtaskFormSubmit = () => {
+    if (!subtaskForm.message.trim()) return
+    const now = new Date().toISOString()
+    if (editingSubtaskId) {
+      setEditedTodo((prev) => ({
+        ...prev,
+        subtasks: prev.subtasks.map((st) =>
+          st.id === editingSubtaskId
+            ? { ...st, ...subtaskForm, message: subtaskForm.message.trim(), updatedAt: now }
+            : st,
+        ),
+      }))
+    } else {
+      const subtask = {
+        id: Date.now().toString(),
+        ...subtaskForm,
+        message: subtaskForm.message.trim(),
+        completed: false,
+        completedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }
+      setEditedTodo((prev) => ({
+        ...prev,
+        subtasks: [...prev.subtasks, subtask],
+      }))
     }
-    setEditedTodo((prev) => ({
-      ...prev,
-      subtasks: [...prev.subtasks, subtask],
-    }))
-    setNewSubtask("")
+    setShowSubtaskForm(false)
+    setEditingSubtaskId(null)
+    setSubtaskForm(EMPTY_SUBTASK_FORM())
+    setShowSubtaskLabelPicker(false)
+  }
+
+  const handleCancelSubtaskForm = () => {
+    setShowSubtaskForm(false)
+    setEditingSubtaskId(null)
+    setSubtaskForm(EMPTY_SUBTASK_FORM())
+    setShowSubtaskLabelPicker(false)
   }
 
   const handleToggleSubtask = (subtaskId) => {
@@ -138,28 +209,6 @@ function TodoDetailModal({ todo, isOpen, onClose, onSave, labels = [] }) {
           : st,
       ),
     }))
-  }
-
-  const handleEditSubtask = (subtaskId) => {
-    const st = editedTodo.subtasks.find((s) => s.id === subtaskId)
-    if (st) {
-      setEditingSubtaskId(subtaskId)
-      setEditingSubtaskText(st.message)
-    }
-  }
-
-  const handleSaveSubtaskEdit = () => {
-    if (!editingSubtaskText.trim()) return
-    setEditedTodo((prev) => ({
-      ...prev,
-      subtasks: prev.subtasks.map((st) =>
-        st.id === editingSubtaskId
-          ? { ...st, message: editingSubtaskText.trim(), updatedAt: new Date().toISOString() }
-          : st,
-      ),
-    }))
-    setEditingSubtaskId(null)
-    setEditingSubtaskText("")
   }
 
   const handleDeleteSubtask = (subtaskId) => {

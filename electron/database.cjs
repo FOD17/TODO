@@ -1,5 +1,7 @@
 const { Client } = require("pg")
 
+const TAG = "[DBManager]"
+
 class DBManager {
   constructor(connectionString) {
     this.connectionString = connectionString || process.env.DATABASE_URL || "postgresql://localhost:5432/postgres"
@@ -9,16 +11,20 @@ class DBManager {
   async connect() {
     if (this.client) return
 
+    console.log(`${TAG} Connecting to database...`)
     this.client = new Client({
       connectionString: this.connectionString,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     })
 
     await this.client.connect()
+    console.log(`${TAG} Connected successfully`)
     await this.initializeTables()
   }
 
   async initializeTables() {
+    console.log(`${TAG} Initializing tables...`)
+
     const createTodosTable = `
       CREATE TABLE IF NOT EXISTS todos (
         id TEXT PRIMARY KEY,
@@ -71,71 +77,108 @@ class DBManager {
     await this.client.query(createContactsTable)
     await this.client.query(createConfigTable)
 
-    // Add description column if it doesn't exist (migration for existing databases)
+    // Migration: add description column to existing databases
     try {
       await this.client.query("ALTER TABLE todos ADD COLUMN IF NOT EXISTS description TEXT")
     } catch (e) {
-      // Column already exists, no problem
+      console.warn(`${TAG} description column migration skipped:`, e.message)
     }
+
+    console.log(`${TAG} Tables ready`)
   }
 
   // ============ TODOS ============
 
+  // PostgreSQL lowercases all unquoted column names, so SELECT * returns
+  // accountrep, createdat, updatedat. We alias them back to camelCase here
+  // so the rest of the app never needs to know about the DB casing.
+  _todoSelect() {
+    return `
+      SELECT
+        id, message, date, company,
+        names,
+        accountrep   AS "accountRep",
+        completed,
+        description,
+        createdat    AS "createdAt",
+        updatedat    AS "updatedAt"
+      FROM todos
+    `
+  }
+
+  // names is stored as TEXT. Normalise it to an array on the way out.
+  _normaliseTodo(row) {
+    if (!row) return row
+    let names = row.names
+    if (!names || names === '' || names === '{}') {
+      names = []
+    } else if (typeof names === 'string') {
+      // PostgreSQL may store as "{a,b}" or "a,b"
+      names = names.replace(/^\{|\}$/g, '').split(',').map(s => s.trim()).filter(Boolean)
+    } else if (!Array.isArray(names)) {
+      names = []
+    }
+    return { ...row, names, subtasks: row.subtasks || [], notes: row.notes || [], labels: row.labels || [] }
+  }
+
   async getTodos() {
-    const activeQuery = "SELECT * FROM todos WHERE completed = false ORDER BY date DESC"
-    const completedQuery = "SELECT * FROM todos WHERE completed = true ORDER BY date DESC"
-
-    const activeResult = await this.client.query(activeQuery)
-    const completedResult = await this.client.query(completedQuery)
-
+    const base = this._todoSelect()
+    const activeResult   = await this.client.query(`${base} WHERE completed = false ORDER BY date DESC`)
+    const completedResult = await this.client.query(`${base} WHERE completed = true  ORDER BY date DESC`)
+    console.log(`${TAG} getTodos: ${activeResult.rows.length} active, ${completedResult.rows.length} completed`)
     return {
-      active: activeResult.rows,
-      completed: completedResult.rows,
+      active:    activeResult.rows.map(r => this._normaliseTodo(r)),
+      completed: completedResult.rows.map(r => this._normaliseTodo(r)),
     }
   }
 
-  async saveTodos(todosData) {
-    await this.client.query("DELETE FROM todos")
+  // Serialise names array → comma string for TEXT storage
+  _serialiseNames(names) {
+    if (!names) return ''
+    if (Array.isArray(names)) return names.join(',')
+    return String(names)
+  }
 
+  async saveTodos(todosData) {
+    const active = todosData.active || []
+    const completed = todosData.completed || []
+    console.log(`${TAG} saveTodos: ${active.length} active, ${completed.length} completed`)
+
+    // Use the actual lowercase column names that exist in the DB
     const insertQuery = `
-      INSERT INTO todos (id, message, date, company, names, accountRep, completed, description, createdAt, updatedAt)
+      INSERT INTO todos (id, message, date, company, names, accountrep, completed, description, createdat, updatedat)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `
-
     const now = new Date().toISOString()
 
-    if (todosData.active && Array.isArray(todosData.active)) {
-      for (const todo of todosData.active) {
+    await this.client.query("BEGIN")
+    try {
+      await this.client.query("DELETE FROM todos")
+      for (const todo of active) {
         await this.client.query(insertQuery, [
-          todo.id,
-          todo.message,
-          todo.date,
-          todo.company,
-          todo.names,
-          todo.accountRep,
-          false,
-          todo.description || "",
-          todo.createdAt || now,
-          todo.updatedAt || now,
+          todo.id, todo.message, todo.date, todo.company,
+          this._serialiseNames(todo.names),
+          todo.accountRep || todo.accountrep || '',
+          false, todo.description || '',
+          todo.createdAt || todo.createdat || now,
+          todo.updatedAt || todo.updatedat || now,
         ])
       }
-    }
-
-    if (todosData.completed && Array.isArray(todosData.completed)) {
-      for (const todo of todosData.completed) {
+      for (const todo of completed) {
         await this.client.query(insertQuery, [
-          todo.id,
-          todo.message,
-          todo.date,
-          todo.company,
-          todo.names,
-          todo.accountRep,
-          true,
-          todo.description || "",
-          todo.createdAt || now,
-          todo.updatedAt || now,
+          todo.id, todo.message, todo.date, todo.company,
+          this._serialiseNames(todo.names),
+          todo.accountRep || todo.accountrep || '',
+          true, todo.description || '',
+          todo.createdAt || todo.createdat || now,
+          todo.updatedAt || todo.updatedat || now,
         ])
       }
+      await this.client.query("COMMIT")
+    } catch (e) {
+      await this.client.query("ROLLBACK")
+      console.error(`${TAG} saveTodos transaction rolled back:`, e.message)
+      throw e
     }
 
     return todosData
@@ -144,42 +187,34 @@ class DBManager {
   async addTodo(todoData) {
     const id = todoData.id || Date.now().toString()
     const query = `
-      INSERT INTO todos (id, message, date, company, names, accountRep, completed)
+      INSERT INTO todos (id, message, date, company, names, accountrep, completed)
       VALUES ($1, $2, $3, $4, $5, $6, false)
     `
-
     await this.client.query(query, [
-      id,
-      todoData.message,
-      todoData.date,
-      todoData.company,
-      todoData.names,
-      todoData.accountRep,
+      id, todoData.message, todoData.date, todoData.company,
+      this._serialiseNames(todoData.names),
+      todoData.accountRep || '',
     ])
-
-    return { id, ...todoData, completed: false }
+    return this._normaliseTodo({ id, ...todoData, completed: false })
   }
 
   async updateTodo(id, updates) {
-    const allowedFields = ["message", "date", "company", "names", "accountRep"]
-    const fields = Object.keys(updates).filter((k) => allowedFields.includes(k))
+    // Map camelCase keys to actual DB column names
+    const fieldMap = { message: 'message', date: 'date', company: 'company', names: 'names', accountRep: 'accountrep' }
+    const fields = Object.keys(updates).filter((k) => fieldMap[k])
 
-    if (fields.length === 0) {
-      const result = await this.client.query("SELECT * FROM todos WHERE id = $1", [id])
-      return result.rows[0]
+    if (fields.length > 0) {
+      const setClause = fields.map((f, i) => `${fieldMap[f]} = $${i + 1}`).join(', ')
+      const values = fields.map((f) => f === 'names' ? this._serialiseNames(updates[f]) : updates[f])
+      values.push(id)
+      await this.client.query(
+        `UPDATE todos SET ${setClause}, updatedat = CURRENT_TIMESTAMP WHERE id = $${values.length}`,
+        values
+      )
     }
 
-    const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(", ")
-    const values = fields.map((f) => updates[f])
-    values.push(id)
-
-    await this.client.query(
-      `UPDATE todos SET ${setClause}, updatedAt = CURRENT_TIMESTAMP WHERE id = $${values.length}`,
-      values
-    )
-
-    const result = await this.client.query("SELECT * FROM todos WHERE id = $1", [id])
-    return result.rows[0]
+    const result = await this.client.query(`${this._todoSelect()} WHERE id = $1`, [id])
+    return this._normaliseTodo(result.rows[0])
   }
 
   async deleteTodo(id) {
@@ -188,90 +223,84 @@ class DBManager {
 
   async completeTodo(id) {
     await this.client.query(
-      "UPDATE todos SET completed = true, updatedAt = CURRENT_TIMESTAMP WHERE id = $1",
+      "UPDATE todos SET completed = true, updatedat = CURRENT_TIMESTAMP WHERE id = $1",
       [id]
     )
   }
 
   async uncompleteTodo(id) {
     await this.client.query(
-      "UPDATE todos SET completed = false, updatedAt = CURRENT_TIMESTAMP WHERE id = $1",
+      "UPDATE todos SET completed = false, updatedat = CURRENT_TIMESTAMP WHERE id = $1",
       [id]
     )
   }
 
   // ============ TAGS ============
+  // The full tags structure (companies, accountExecutives, labels, companyAssignments,
+  // companyTypes) is stored as a single JSON blob in the config table under key "tags_blob".
+  // The legacy tags table is kept for backwards compatibility but is no longer the primary store.
 
   async getTags() {
-    const result = await this.client.query("SELECT company, tagName FROM tags ORDER BY company, tagName")
-    const rows = result.rows
-
-    const tags = {}
-    rows.forEach((row) => {
-      if (!tags[row.company]) {
-        tags[row.company] = []
+    const result = await this.client.query(
+      "SELECT value FROM config WHERE key = 'tags_blob'"
+    )
+    if (result.rows.length > 0) {
+      try {
+        return JSON.parse(result.rows[0].value)
+      } catch (err) {
+        console.warn(`${TAG} tags_blob JSON is corrupt, rebuilding from legacy table:`, err.message)
       }
-      tags[row.company].push(row.tagName)
-    })
-
-    return tags
+    }
+    // Fallback: build from legacy tags table (columns are lowercase: tagname, company)
+    const rows = (await this.client.query("SELECT company, tagname FROM tags ORDER BY company, tagname")).rows
+    const companies = [...new Set(rows.map((r) => r.company).filter(Boolean))]
+    console.log(`${TAG} getTags: no tags_blob found, built ${companies.length} companies from legacy tags table`)
+    return { companies, accountExecutives: [], companyAssignments: {}, companyTypes: {}, labels: [] }
   }
 
   async saveTags(tagsData) {
-    await this.client.query("DELETE FROM tags")
-
-    const insertQuery = `
-      INSERT INTO tags (id, company, tagName, createdAt)
-      VALUES ($1, $2, $3, $4)
-    `
-
-    const now = new Date().toISOString()
-
-    for (const [company, tagNames] of Object.entries(tagsData)) {
-      if (Array.isArray(tagNames)) {
-        for (const tagName of tagNames) {
-          const id = `tag-${Date.now()}-${Math.random()}`
-          await this.client.query(insertQuery, [id, company, tagName, now])
-        }
-      }
+    const json = JSON.stringify(tagsData)
+    const existing = await this.client.query("SELECT key FROM config WHERE key = 'tags_blob'")
+    if (existing.rows.length > 0) {
+      await this.client.query(
+        "UPDATE config SET value = $1, updatedat = CURRENT_TIMESTAMP WHERE key = 'tags_blob'",
+        [json]
+      )
+    } else {
+      await this.client.query(
+        "INSERT INTO config (key, value) VALUES ('tags_blob', $1)",
+        [json]
+      )
     }
-
     return tagsData
   }
 
   async addTag(company, tagName) {
-    const id = `tag-${Date.now()}-${Math.random()}`
-    try {
-      await this.client.query("INSERT INTO tags (id, company, tagName) VALUES ($1, $2, $3)", [id, company, tagName])
-    } catch (err) {
-      if (err.message.includes("duplicate key value")) {
-        return { error: "Tag already exists for this company" }
-      }
-      throw err
-    }
-
-    return { id, company, tagName }
+    const tags = await this.getTags()
+    if (!tags.companies.includes(company)) tags.companies.push(company)
+    await this.saveTags(tags)
+    return { company, tagName }
   }
 
   async removeTag(company, tagName) {
-    await this.client.query("DELETE FROM tags WHERE company = $1 AND tagName = $2", [company, tagName])
+    const tags = await this.getTags()
+    await this.saveTags(tags)
   }
 
   // ============ CONTACTS ============
 
   async getContacts() {
-    const result = await this.client.query("SELECT * FROM contacts ORDER BY company, name")
-    const rows = result.rows
+    // Alias timestamp columns back to camelCase
+    const result = await this.client.query(`
+      SELECT id, company, name, type, email, phone, notes,
+             createdat AS "createdAt", updatedat AS "updatedAt"
+      FROM contacts ORDER BY company, name
+    `)
 
     const contacts = {}
-    rows.forEach((row) => {
-      if (!contacts[row.company]) {
-        contacts[row.company] = {}
-      }
-      if (!contacts[row.company][row.name]) {
-        contacts[row.company][row.name] = []
-      }
-
+    result.rows.forEach((row) => {
+      if (!contacts[row.company]) contacts[row.company] = {}
+      if (!contacts[row.company][row.name]) contacts[row.company][row.name] = []
       const { company, name, ...contact } = row
       contacts[row.company][row.name].push(contact)
     })
@@ -282,8 +311,9 @@ class DBManager {
   async saveContacts(contactsData) {
     await this.client.query("DELETE FROM contacts")
 
+    // Use actual lowercase column names from the DB
     const insertQuery = `
-      INSERT INTO contacts (id, company, name, type, email, phone, notes, createdAt, updatedAt)
+      INSERT INTO contacts (id, company, name, type, email, phone, notes, createdat, updatedat)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `
 
@@ -370,7 +400,7 @@ class DBManager {
     values.push(contactId)
 
     await this.client.query(
-      `UPDATE contacts SET ${setClause}, updatedAt = CURRENT_TIMESTAMP WHERE id = $${values.length}`,
+      `UPDATE contacts SET ${setClause}, updatedat = CURRENT_TIMESTAMP WHERE id = $${values.length}`,
       values
     )
 
@@ -393,6 +423,7 @@ class DBManager {
       try {
         config[row.key] = JSON.parse(row.value)
       } catch {
+        // Value is a plain string, not JSON — use as-is
         config[row.key] = row.value
       }
     })
@@ -407,7 +438,7 @@ class DBManager {
 
       if (existingResult.rows.length > 0) {
         await this.client.query(
-          "UPDATE config SET value = $1, updatedAt = CURRENT_TIMESTAMP WHERE key = $2",
+          "UPDATE config SET value = $1, updatedat = CURRENT_TIMESTAMP WHERE key = $2",
           [jsonValue, key]
         )
       } else {
@@ -437,71 +468,70 @@ class DBManager {
   }
 
   async importBackup(backupData) {
-    await this.client.query("DELETE FROM todos")
-    await this.client.query("DELETE FROM tags")
-    await this.client.query("DELETE FROM contacts")
-    await this.client.query("DELETE FROM config")
+    console.log(`${TAG} importBackup: starting full restore`)
+    await this.client.query("BEGIN")
+    try {
+      await this.client.query("DELETE FROM todos")
+      await this.client.query("DELETE FROM tags")
+      await this.client.query("DELETE FROM contacts")
+      await this.client.query("DELETE FROM config")
 
-    if (backupData.todos && Array.isArray(backupData.todos)) {
-      const insertQuery = `
-        INSERT INTO todos (id, message, date, company, names, accountRep, completed, createdAt, updatedAt)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `
-
-      for (const todo of backupData.todos) {
-        await this.client.query(insertQuery, [
-          todo.id,
-          todo.message,
-          todo.date,
-          todo.company,
-          todo.names,
-          todo.accountRep,
-          todo.completed || false,
-          todo.createdAt || new Date().toISOString(),
-          todo.updatedAt || new Date().toISOString(),
-        ])
+      if (backupData.todos && Array.isArray(backupData.todos)) {
+        console.log(`${TAG} importBackup: inserting ${backupData.todos.length} todos`)
+        const insertQuery = `
+          INSERT INTO todos (id, message, date, company, names, accountRep, completed, createdAt, updatedAt)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `
+        for (const todo of backupData.todos) {
+          await this.client.query(insertQuery, [
+            todo.id, todo.message, todo.date, todo.company, todo.names,
+            todo.accountRep, todo.completed || false,
+            todo.createdAt || new Date().toISOString(),
+            todo.updatedAt || new Date().toISOString(),
+          ])
+        }
       }
-    }
 
-    if (backupData.tags && Array.isArray(backupData.tags)) {
-      const insertQuery = `
-        INSERT INTO tags (id, company, tagName, createdAt)
-        VALUES ($1, $2, $3, $4)
-      `
-
-      for (const tag of backupData.tags) {
-        await this.client.query(insertQuery, [
-          tag.id,
-          tag.company,
-          tag.tagName,
-          tag.createdAt || new Date().toISOString(),
-        ])
+      if (backupData.tags && Array.isArray(backupData.tags)) {
+        console.log(`${TAG} importBackup: inserting ${backupData.tags.length} tags`)
+        const insertQuery = `
+          INSERT INTO tags (id, company, tagName, createdAt)
+          VALUES ($1, $2, $3, $4)
+        `
+        for (const tag of backupData.tags) {
+          await this.client.query(insertQuery, [
+            tag.id, tag.company, tag.tagName,
+            tag.createdAt || new Date().toISOString(),
+          ])
+        }
       }
-    }
 
-    if (backupData.contacts && Array.isArray(backupData.contacts)) {
-      const insertQuery = `
-        INSERT INTO contacts (id, company, name, type, email, phone, notes, createdAt, updatedAt)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `
-
-      for (const contact of backupData.contacts) {
-        await this.client.query(insertQuery, [
-          contact.id,
-          contact.company,
-          contact.name,
-          contact.type || "person",
-          contact.email || "",
-          contact.phone || "",
-          contact.notes || "",
-          contact.createdAt || new Date().toISOString(),
-          contact.updatedAt || new Date().toISOString(),
-        ])
+      if (backupData.contacts && Array.isArray(backupData.contacts)) {
+        console.log(`${TAG} importBackup: inserting ${backupData.contacts.length} contacts`)
+        const insertQuery = `
+          INSERT INTO contacts (id, company, name, type, email, phone, notes, createdAt, updatedAt)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `
+        for (const contact of backupData.contacts) {
+          await this.client.query(insertQuery, [
+            contact.id, contact.company, contact.name, contact.type || "person",
+            contact.email || "", contact.phone || "", contact.notes || "",
+            contact.createdAt || new Date().toISOString(),
+            contact.updatedAt || new Date().toISOString(),
+          ])
+        }
       }
-    }
 
-    if (backupData.config && typeof backupData.config === "object") {
-      await this.updateConfig(backupData.config)
+      if (backupData.config && typeof backupData.config === "object") {
+        await this.updateConfig(backupData.config)
+      }
+
+      await this.client.query("COMMIT")
+      console.log(`${TAG} importBackup: restore complete`)
+    } catch (e) {
+      await this.client.query("ROLLBACK")
+      console.error(`${TAG} importBackup transaction rolled back:`, e.message)
+      throw e
     }
 
     return { status: "success", message: "Backup imported successfully" }
@@ -527,7 +557,8 @@ class DBManager {
   // ============ HEALTH CHECK ============
 
   async ping() {
-    await this.client.query("SELECT 1")
+    // Verify actual table access, not just connectivity
+    await this.client.query("SELECT 1 FROM todos LIMIT 1")
     return { ok: true, timestamp: Date.now() }
   }
 

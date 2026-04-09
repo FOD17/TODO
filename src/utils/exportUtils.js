@@ -101,10 +101,19 @@ export function buildMarkdownExport({ todos, tags }) {
 // Write to File System Access API directory handle
 // ---------------------------------------------------------------------------
 export async function writeToDirectory(dirHandle, filename, content) {
-  const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
-  const writable = await fileHandle.createWritable()
-  await writable.write(content)
-  await writable.close()
+  let writable
+  try {
+    const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+    writable = await fileHandle.createWritable()
+    await writable.write(content)
+    await writable.close()
+  } catch (err) {
+    console.error(`[exportUtils] Failed to write ${filename}:`, err)
+    if (writable) {
+      try { await writable.close() } catch {}
+    }
+    throw err
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -447,7 +447,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           left: 50%;
           transform: translate(-50%, -50%);
           color: white;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           font-weight: bold;
         }
 
@@ -458,7 +458,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
 
         .card-title {
           margin: 0 0 8px;
-          font-size: 16px;
+          font-size: calc(16px * var(--font-scale, 1));
           font-weight: 600;
           color: var(--text);
           word-break: break-word;
@@ -467,7 +467,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
 
         .card-description {
           margin: 0 0 12px;
-          font-size: 14px;
+          font-size: calc(14px * var(--font-scale, 1));
           color: var(--text-muted);
           line-height: 1.5;
           word-break: break-word;
@@ -486,7 +486,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           gap: 3px;
           padding: 2px 8px;
           border-radius: 10px;
-          font-size: 11px;
+          font-size: calc(11px * var(--font-scale, 1));
           font-weight: 600;
           position: relative;
         }
@@ -505,7 +505,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
         }
 
         .pill-info-dot {
-          font-size: 14px;
+          font-size: calc(14px * var(--font-scale, 1));
           line-height: 1;
           opacity: 0.7;
         }
@@ -517,7 +517,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           transform: translateX(-50%);
           background: var(--text);
           color: var(--card);
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           font-weight: 400;
           line-height: 1.4;
           padding: 6px 10px;
@@ -560,7 +560,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           padding: 4px 8px;
           background: var(--background);
           color: var(--text);
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           font-weight: 500;
           border-radius: 4px;
           white-space: nowrap;
@@ -624,7 +624,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
         }
 
         .expand-chevron {
-          font-size: 10px;
+          font-size: calc(10px * var(--font-scale, 1));
           opacity: 0.7;
         }
 
@@ -642,7 +642,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           color: var(--text);
         }
 
@@ -672,7 +672,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           left: 50%;
           transform: translate(-50%, -50%);
           color: white;
-          font-size: 10px;
+          font-size: calc(10px * var(--font-scale, 1));
           font-weight: bold;
         }
 
@@ -689,13 +689,13 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           display: flex;
           align-items: flex-start;
           gap: 6px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           color: var(--text-muted);
         }
 
         .note-icon {
           flex-shrink: 0;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           margin-top: 1px;
         }
 
@@ -724,7 +724,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           border: 1px solid var(--border);
           border-radius: 6px;
           padding: 3px 10px;
-          font-size: 12px;
+          font-size: calc(12px * var(--font-scale, 1));
           font-weight: 500;
           cursor: pointer;
           color: var(--text-muted);
@@ -752,7 +752,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           border: 1px solid var(--border);
           border-radius: 6px;
           padding: 5px 10px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           background: var(--background);
           color: var(--text);
           outline: none;
@@ -769,7 +769,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           border: none;
           border-radius: 6px;
           padding: 5px 12px;
-          font-size: 13px;
+          font-size: calc(13px * var(--font-scale, 1));
           font-weight: 500;
           cursor: pointer;
           transition: opacity 0.15s;
@@ -803,7 +803,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           border-radius: 6px;
           cursor: pointer;
           padding: 6px 8px;
-          font-size: 14px;
+          font-size: calc(14px * var(--font-scale, 1));
           color: var(--text);
           transition: all 0.2s;
           display: flex;
@@ -817,7 +817,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
         }
 
         .plus-btn {
-          font-size: 18px;
+          font-size: calc(18px * var(--font-scale, 1));
           font-weight: 300;
           line-height: 1;
         }
@@ -841,7 +841,7 @@ function TodoCard({ todo, onComplete, onDelete, onEdit, onClick, onSave, isCompl
           }
 
           .card-title {
-            font-size: 15px;
+            font-size: calc(15px * var(--font-scale, 1));
           }
 
           .card-actions {

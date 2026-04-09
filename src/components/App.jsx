@@ -1,9 +1,5 @@
+'use client'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
-import {
-  loadTodosLocalStorageSync,
-  loadTagsLocalStorageSync,
-  loadConfigLocalStorageSync,
-} from "../utils/markdownHandler"
 import { electronAdapter } from "../utils/electronAdapter"
 import { debounce } from "../utils/debounce"
 import { seedDefaultLabels } from "../utils/tagManager"
@@ -20,26 +16,15 @@ import CompanyTabs from "./CompanyTabs"
 import EditTodoDrawer from "./EditTodoDrawer"
 import ConfigManager from "./ConfigManager"
 import TodoDetailModal from "./TodoDetailModal"
-import DBStatusIndicator from "./DBStatusIndicator"
 
-// Initialize tags with new format if needed
-const initializeTags = () => {
-  const loaded = loadTagsLocalStorageSync()
-  if (typeof loaded !== "object" || loaded === null || !loaded.companies) {
-    return { companies: [], accountExecutives: [], companyAssignments: {}, companyTypes: {}, labels: [] }
-  }
-  return {
-    ...loaded,
-    companyAssignments: loaded.companyAssignments || {},
-    companyTypes: loaded.companyTypes || {},
-    labels: loaded.labels || [],
-  }
-}
+const DEFAULT_TAGS = { companies: [], accountExecutives: [], companyAssignments: {}, companyTypes: {}, labels: [] }
+const DEFAULT_CONFIG = { theme: "github-dark", compactMode: false, fontSize: "normal", sidebarPosition: "left", defaultView: "company" }
 
 function App() {
-  const [todos, setTodos] = useState(loadTodosLocalStorageSync())
-  const [tags, setTags] = useState(() => seedDefaultLabels(initializeTags()))
-  const [config, setConfig] = useState(loadConfigLocalStorageSync())
+  const [todos, setTodos] = useState({ active: [], completed: [] })
+  const [tags, setTags] = useState(() => seedDefaultLabels(DEFAULT_TAGS))
+  const [config, setConfig] = useState(DEFAULT_CONFIG)
+  const dataLoaded = useRef(false)
   const [selectedCompany, setSelectedCompany] = useState("All")
   const [showConfig, setShowConfig] = useState(false)
   const [configDefaultTab, setConfigDefaultTab] = useState("theme")
@@ -205,6 +190,9 @@ function App() {
 
   const handleConfigChange = useCallback((newConfig) => {
     setConfig(newConfig)
+    electronAdapter.updateConfig(newConfig).catch((e) => {
+      console.error("Failed to save config:", e)
+    })
   }, [])
 
   const handleOpenSettings = useCallback((tab = "theme") => {
@@ -220,55 +208,76 @@ function App() {
     [saveTagsFn],
   )
 
-  // Load data on mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [loadedTodos, loadedTags, loadedConfig] = await Promise.all([
-          electronAdapter.getTodos(),
-          electronAdapter.getTags(),
-          electronAdapter.getConfig(),
-        ])
-
-        const [loadedAudio, loadedEmails] = await Promise.all([
-          electronAdapter.getAudioMessages(),
-          electronAdapter.getEmails(),
-        ])
-
-        if (loadedTodos) setTodos(loadedTodos)
-        if (loadedTags) {
-          const normalised = {
-            companies: Array.isArray(loadedTags.companies) ? loadedTags.companies : [],
-            accountExecutives: Array.isArray(loadedTags.accountExecutives) ? loadedTags.accountExecutives : [],
-            companyAssignments: loadedTags.companyAssignments || {},
-            companyTypes: loadedTags.companyTypes || {},
-            labels: Array.isArray(loadedTags.labels) ? loadedTags.labels : [],
-          }
-          setTags(seedDefaultLabels(normalised))
-        }
-        if (loadedConfig) setConfig(loadedConfig)
-        if (loadedAudio) setAudioMessages(loadedAudio)
-        if (loadedEmails) setEmails(loadedEmails)
-      } catch (e) {
-        console.error("Failed to load data:", e)
+  // When a company is dragged to a different AE, update accountRep on all
+  // that company's todos (both active and completed) and save once.
+  const handleReassignTodos = useCallback((company, newAEName) => {
+    setTodos((prev) => {
+      const reassign = (todo) =>
+        todo.company === company ? { ...todo, accountRep: newAEName } : todo
+      const updated = {
+        active: prev.active.map(reassign),
+        completed: prev.completed.map(reassign),
       }
-    }
-
-    loadData()
+      electronAdapter.saveTodos(updated).catch((e) => {
+        console.error("Failed to save reassigned todos:", e)
+      })
+      return updated
+    })
   }, [])
 
-  // Save todos when they change
+  // Load data on mount — and re-load from DB whenever it comes online,
+  // because the initial load may have run before the DB connection was ready.
+  const loadDataFromDB = useCallback(async () => {
+    try {
+      const [loadedTodos, loadedTags, loadedConfig] = await Promise.all([
+        electronAdapter.getTodos(),
+        electronAdapter.getTags(),
+        electronAdapter.getConfig(),
+      ])
+
+      const [loadedAudio, loadedEmails] = await Promise.all([
+        electronAdapter.getAudioMessages(),
+        electronAdapter.getEmails(),
+      ])
+
+      if (loadedTodos) setTodos(loadedTodos)
+      if (loadedTags) {
+        const normalised = {
+          companies: Array.isArray(loadedTags.companies) ? loadedTags.companies : [],
+          accountExecutives: Array.isArray(loadedTags.accountExecutives) ? loadedTags.accountExecutives : [],
+          companyAssignments: loadedTags.companyAssignments || {},
+          companyTypes: loadedTags.companyTypes || {},
+          labels: Array.isArray(loadedTags.labels) ? loadedTags.labels : [],
+        }
+        setTags(seedDefaultLabels(normalised))
+      }
+      if (loadedConfig) setConfig((prev) => ({ ...prev, ...loadedConfig }))
+      if (loadedAudio) setAudioMessages(loadedAudio)
+      if (loadedEmails) setEmails(loadedEmails)
+      dataLoaded.current = true
+      console.log("[App] Data loaded from API successfully")
+    } catch (e) {
+      console.error("[App] Failed to load data:", e)
+    }
+  }, [])
+
   useEffect(() => {
+    loadDataFromDB()
+  }, [loadDataFromDB])
+
+  // Guard all saves so we never overwrite the DB with the empty initial state.
+  useEffect(() => {
+    if (!dataLoaded.current) return
     saveTodosFn(todos)
   }, [todos, saveTodosFn])
 
-  // Save audio messages when they change
   useEffect(() => {
+    if (!dataLoaded.current) return
     saveAudioMessagesFn(audioMessages)
   }, [audioMessages, saveAudioMessagesFn])
 
-  // Save emails when they change
   useEffect(() => {
+    if (!dataLoaded.current) return
     saveEmailsFn(emails)
   }, [emails, saveEmailsFn])
 
@@ -386,7 +395,12 @@ function App() {
   }, [])
 
   return (
-    <div className={`app-modern theme-${config.theme}`}>
+    <div
+      className={`app-modern theme-${config.theme || "github-dark"}`}
+      style={{
+        "--font-scale": { small: 0.85, normal: 1, large: 1.2, xlarge: 1.4 }[config.fontSize || "normal"],
+      }}
+    >
       <div className="app-layout">
         {/* Sidebar */}
         <Sidebar
@@ -396,6 +410,7 @@ function App() {
           stats={stats}
           tags={tags}
           onTagsChange={handleTagsChange}
+          onReassignTodos={handleReassignTodos}
           companyTypes={tags.companyTypes || {}}
         />
 
@@ -474,9 +489,6 @@ function App() {
           onSelectSyncFolder={handleSelectSyncFolder}
           defaultTab={configDefaultTab}
         />
-
-        {/* DB connection status dot — above the settings button */}
-        <DBStatusIndicator onOpenSettings={() => handleOpenSettings("database")} />
 
         {/* Floating Settings Button */}
         {!showConfig && (
@@ -658,7 +670,7 @@ function App() {
           background: var(--primary);
           border: none;
           cursor: pointer;
-          font-size: 24px;
+          font-size: calc(24px * var(--font-scale, 1));
           display: flex;
           align-items: center;
           justify-content: center;

@@ -314,7 +314,7 @@ describe("SyncManager", () => {
       expect(() => sm.stop()).not.toThrow()
     })
 
-    it("poll fires 'online' when SQLite becomes reachable", async () => {
+    it("poll fires 'online' when PostgreSQL becomes reachable", async () => {
       const cb = vi.fn()
       sm.onStatusChange(cb)
       window.electron = {
@@ -327,7 +327,7 @@ describe("SyncManager", () => {
       expect(sm.available).toBe(true)
     })
 
-    it("poll fires 'offline' when SQLite becomes unreachable", async () => {
+    it("poll fires 'offline' when PostgreSQL becomes unreachable", async () => {
       const cb = vi.fn()
       // Start as available.
       sm.setAvailable(true)

@@ -1,13 +1,13 @@
 /**
  * SyncManager
  *
- * Manages the reliability layer between SQLite (source of truth) and
+ * Manages the reliability layer between PostgreSQL (source of truth) and
  * localStorage (backup). Provides:
  *
- *  - Health-check polling: pings the SQLite IPC bridge on a fixed interval
- *  - Dirty tracking: records which data collections were mutated while SQLite
+ *  - Health-check polling: pings the PostgreSQL IPC bridge on a fixed interval
+ *  - Dirty tracking: records which data collections were mutated while PostgreSQL
  *    was unreachable so they can be synced when connectivity is restored
- *  - Status-change events: notifies listeners when SQLite goes offline or
+ *  - Status-change events: notifies listeners when PostgreSQL goes offline or
  *    comes back online so the rest of the app can react immediately
  *
  * Usage
@@ -17,20 +17,20 @@
  *   syncManager.start()          // begin polling (idempotent)
  *   syncManager.stop()           // stop polling
  *
- *   syncManager.available        // boolean — is SQLite reachable right now?
+ *   syncManager.available        // boolean — is PostgreSQL reachable right now?
  *   syncManager.markDirty('todos')
  *   syncManager.hasDirty()       // true if anything needs syncing
  *
  *   const unsub = syncManager.onStatusChange(({ type }) => {
- *     if (type === 'online') { ... }   // SQLite came back
- *     if (type === 'offline') { ... }  // SQLite went down
+ *     if (type === 'online') { ... }   // PostgreSQL came back
+ *     if (type === 'offline') { ... }  // PostgreSQL went down
  *   })
  *   unsub()  // remove listener
  */
 
 export class SyncManager {
   constructor({ pollIntervalMs = 5_000 } = {}) {
-    /** @type {boolean} Current SQLite reachability */
+    /** @type {boolean} Current PostgreSQL reachability */
     this._available = false
 
     /**
@@ -42,7 +42,7 @@ export class SyncManager {
     this._stopped = false
 
     /**
-     * Collections that were mutated while SQLite was unreachable.
+     * Collections that were mutated while PostgreSQL was unreachable.
      * Valid values: 'todos' | 'tags' | 'contacts' | 'config'
      * @type {Set<string>}
      */
@@ -59,7 +59,7 @@ export class SyncManager {
 
   // ─── Public getters ────────────────────────────────────────────────────────
 
-  /** True when SQLite is currently reachable. */
+  /** True when PostgreSQL is currently reachable. */
   get available() {
     return this._available
   }
@@ -106,14 +106,14 @@ export class SyncManager {
     this._available = nowAvailable
 
     if (!wasAvailable && nowAvailable) {
-      this._emit("online")
+      await this._emit("online")
     } else if (wasAvailable && !nowAvailable) {
-      this._emit("offline")
+      await this._emit("offline")
     }
   }
 
   /**
-   * Probe the SQLite IPC bridge.
+   * Probe the PostgreSQL IPC bridge.
    * Returns true only when window.electron.ping() resolves with { ok: true }.
    * Any error or missing bridge returns false without throwing.
    */
@@ -129,27 +129,27 @@ export class SyncManager {
   }
 
   /**
-   * Directly set SQLite availability. Use this when an IPC call fails or
+   * Directly set PostgreSQL availability. Use this when an IPC call fails or
    * succeeds outside of the polling cycle (e.g., the adapter catches a thrown
-   * error and wants to mark SQLite offline immediately rather than waiting for
+   * error and wants to mark PostgreSQL offline immediately rather than waiting for
    * the next poll).
    *
    * Fires the appropriate status-change event if the value changed.
    *
    * @param {boolean} val
    */
-  setAvailable(val) {
+  async setAvailable(val) {
     const was = this._available
     this._available = val
-    if (!was && val) this._emit("online")
-    else if (was && !val) this._emit("offline")
+    if (!was && val) await this._emit("online")
+    else if (was && !val) await this._emit("offline")
   }
 
   // ─── Dirty collection tracking ─────────────────────────────────────────────
 
   /**
-   * Mark a data collection as dirty (localStorage has data that SQLite does
-   * not, because a write failed or was skipped while SQLite was unreachable).
+   * Mark a data collection as dirty (localStorage has data that PostgreSQL does
+   * not, because a write failed or was skipped while PostgreSQL was unreachable).
    *
    * @param {'todos'|'tags'|'contacts'|'config'} collection
    */
@@ -159,7 +159,7 @@ export class SyncManager {
 
   /**
    * Clear the dirty flag for a collection after it has been successfully
-   * synced to SQLite.
+   * synced to PostgreSQL.
    *
    * @param {'todos'|'tags'|'contacts'|'config'} collection
    */
@@ -207,11 +207,11 @@ export class SyncManager {
     }
   }
 
-  /** @private */
-  _emit(type) {
+  /** @private — awaits each listener in sequence so async listeners complete in order */
+  async _emit(type) {
     for (const fn of this._listeners) {
       try {
-        fn({ type })
+        await fn({ type })
       } catch (err) {
         console.error("[SyncManager] listener error:", err)
       }

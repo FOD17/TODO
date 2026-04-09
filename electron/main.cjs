@@ -26,8 +26,8 @@ function loadStoredConnectionString() {
       return safeStorage.decryptString(Buffer.from(data.encrypted, "base64"))
     }
     if (data.plain) return data.plain
-  } catch {
-    // Corrupt or missing file — fall back to default
+  } catch (err) {
+    console.warn("[main] Could not read stored connection string, using default:", err.message)
   }
   return null
 }
@@ -71,7 +71,8 @@ function parseConnectionString(connStr) {
       user: url.username ? decodeURIComponent(url.username) : "",
       hasPassword: !!url.password,
     }
-  } catch {
+  } catch (err) {
+    console.warn("[main] Failed to parse connection string, using defaults:", err.message)
     return { host: "localhost", port: 5432, database: "postgres", user: "", hasPassword: false }
   }
 }
@@ -181,99 +182,117 @@ app.on("activate", () => {
   }
 })
 
+// ── IPC helper ────────────────────────────────────────────────────────────
+// Wraps every IPC handler so unhandled DB errors are logged in the main
+// process and returned as a serialisable { ok: false, error } object rather
+// than crashing the handler or leaving the renderer with an unresolved promise.
+
+function ipcHandle(channel, fn) {
+  ipcMain.handle(channel, async (...args) => {
+    try {
+      return await fn(...args)
+    } catch (err) {
+      console.error(`[IPC] ${channel} failed:`, err.message)
+      // Throw so the renderer-side ipcRenderer.invoke() rejects — the
+      // ElectronAdapter catch blocks will then handle it gracefully.
+      throw err
+    }
+  })
+}
+
 // ── IPC: Todos ─────────────────────────────────────────────────────────────
 
-ipcMain.handle("db:getTodos", async () => {
+ipcHandle("db:getTodos", async () => {
   return database.getTodos()
 })
 
-ipcMain.handle("db:saveTodos", async (event, todosData) => {
+ipcHandle("db:saveTodos", async (event, todosData) => {
   return database.saveTodos(todosData)
 })
 
-ipcMain.handle("db:addTodo", async (event, todoData) => {
+ipcHandle("db:addTodo", async (event, todoData) => {
   return database.addTodo(todoData)
 })
 
-ipcMain.handle("db:updateTodo", async (event, id, updates) => {
+ipcHandle("db:updateTodo", async (event, id, updates) => {
   return database.updateTodo(id, updates)
 })
 
-ipcMain.handle("db:deleteTodo", async (event, id) => {
+ipcHandle("db:deleteTodo", async (event, id) => {
   return database.deleteTodo(id)
 })
 
-ipcMain.handle("db:completeTodo", async (event, id) => {
+ipcHandle("db:completeTodo", async (event, id) => {
   return database.completeTodo(id)
 })
 
-ipcMain.handle("db:uncompleteTodo", async (event, id) => {
+ipcHandle("db:uncompleteTodo", async (event, id) => {
   return database.uncompleteTodo(id)
 })
 
 // ── IPC: Tags ──────────────────────────────────────────────────────────────
 
-ipcMain.handle("db:getTags", async () => {
+ipcHandle("db:getTags", async () => {
   return database.getTags()
 })
 
-ipcMain.handle("db:saveTags", async (event, tagsData) => {
+ipcHandle("db:saveTags", async (event, tagsData) => {
   return database.saveTags(tagsData)
 })
 
-ipcMain.handle("db:addTag", async (event, company, tagName) => {
+ipcHandle("db:addTag", async (event, company, tagName) => {
   return database.addTag(company, tagName)
 })
 
-ipcMain.handle("db:removeTag", async (event, company, tagName) => {
+ipcHandle("db:removeTag", async (event, company, tagName) => {
   return database.removeTag(company, tagName)
 })
 
 // ── IPC: Contacts ──────────────────────────────────────────────────────────
 
-ipcMain.handle("db:getContacts", async () => {
+ipcHandle("db:getContacts", async () => {
   return database.getContacts()
 })
 
-ipcMain.handle("db:saveContacts", async (event, contactsData) => {
+ipcHandle("db:saveContacts", async (event, contactsData) => {
   return database.saveContacts(contactsData)
 })
 
-ipcMain.handle("db:addContact", async (event, company, contact) => {
+ipcHandle("db:addContact", async (event, company, contact) => {
   return database.addContact(company, contact)
 })
 
-ipcMain.handle("db:updateContact", async (event, company, contactId, updates) => {
+ipcHandle("db:updateContact", async (event, company, contactId, updates) => {
   return database.updateContact(company, contactId, updates)
 })
 
-ipcMain.handle("db:deleteContact", async (event, company, contactId) => {
+ipcHandle("db:deleteContact", async (event, company, contactId) => {
   return database.deleteContact(company, contactId)
 })
 
 // ── IPC: Config ────────────────────────────────────────────────────────────
 
-ipcMain.handle("db:getConfig", async () => {
+ipcHandle("db:getConfig", async () => {
   return database.getConfig()
 })
 
-ipcMain.handle("db:updateConfig", async (event, config) => {
+ipcHandle("db:updateConfig", async (event, config) => {
   return database.updateConfig(config)
 })
 
 // ── IPC: Backup / Restore ──────────────────────────────────────────────────
 
-ipcMain.handle("db:exportBackup", async () => {
+ipcHandle("db:exportBackup", async () => {
   return database.exportBackup()
 })
 
-ipcMain.handle("db:importBackup", async (event, backupData) => {
+ipcHandle("db:importBackup", async (event, backupData) => {
   return database.importBackup(backupData)
 })
 
 // ── IPC: Status ────────────────────────────────────────────────────────────
 
-ipcMain.handle("db:getStatus", async () => {
+ipcHandle("db:getStatus", async () => {
   return {
     ready: true,
     isDev,
@@ -288,7 +307,8 @@ ipcMain.handle("db:getStatus", async () => {
 ipcMain.handle("db:ping", async () => {
   try {
     return await database.ping()
-  } catch {
+  } catch (err) {
+    console.warn("[IPC] db:ping failed:", err.message)
     return { ok: false }
   }
 })

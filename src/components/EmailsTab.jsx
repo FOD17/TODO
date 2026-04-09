@@ -47,6 +47,7 @@ function EmailsTab({ company, emails, onAddEmails, onDeleteEmails }) {
             fileName: file.name,
           })
         } catch (err) {
+          console.error(`[EmailsTab] Failed to parse ${file.name}:`, err)
           setUploadError((prev) =>
             prev ? `${prev}\n${file.name}: ${err.message}` : `${file.name}: ${err.message}`,
           )
@@ -55,6 +56,14 @@ function EmailsTab({ company, emails, onAddEmails, onDeleteEmails }) {
         if (pending === 0 && results.length > 0) {
           onAddEmails(results)
         }
+      }
+      reader.onerror = () => {
+        console.error(`[EmailsTab] FileReader error reading ${file.name}`)
+        setUploadError((prev) =>
+          prev ? `${prev}\n${file.name}: could not read file` : `${file.name}: could not read file`,
+        )
+        pending--
+        if (pending === 0 && results.length > 0) onAddEmails(results)
       }
       reader.readAsText(file)
     }
@@ -106,11 +115,18 @@ function EmailsTab({ company, emails, onAddEmails, onDeleteEmails }) {
 
     const html = buildPrintHtml(toExport)
     const win = window.open("", "_blank")
-    if (!win) return
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    win.print()
+    if (!win) {
+      console.error("[EmailsTab] Could not open print window — popup may be blocked")
+      return
+    }
+    try {
+      win.document.write(html)
+      win.document.close()
+      win.focus()
+      win.print()
+    } catch (err) {
+      console.error("[EmailsTab] Print failed:", err)
+    }
   }
 
   const buildPrintHtml = (items) => {
